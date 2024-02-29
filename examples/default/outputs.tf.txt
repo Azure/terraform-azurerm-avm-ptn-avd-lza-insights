@@ -1,0 +1,9 @@
+output "log_analytics_workspace_name" {
+  description = "The name of the Log Analytics Workspace."
+  value       = try(one(azurerm_log_analytics_workspace.this).name, null)
+}
+
+output "log_analytics_workspace_id" {
+  description = "The name of the Log Analytics Workspace."
+  value       = try(one(azurerm_log_analytics_workspace.this).id, null)
+}
