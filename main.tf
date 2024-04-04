@@ -1,8 +1,8 @@
 # Create DCR for AVD resources
 resource "azurerm_monitor_data_collection_rule" "this" {
-  location                    = var.location
-  name                        = var.name
-  resource_group_name         = var.resource_group_name
+  location                    = var.monitor_data_collection_rule_location
+  name                        = var.monitor_data_collection_rule_name
+  resource_group_name         = var.monitor_data_collection_rule_resource_group_name
   data_collection_endpoint_id = var.monitor_data_collection_rule_data_collection_endpoint_id
   description                 = var.monitor_data_collection_rule_description
   kind                        = var.monitor_data_collection_rule_kind
@@ -226,12 +226,10 @@ resource "azurerm_monitor_data_collection_rule" "this" {
 }
 
 resource "azurerm_monitor_data_collection_rule_association" "this" {
-  for_each = var.target_resource_id == null ? {} : { "resource_id" = var.target_resource_id }
-
-  target_resource_id      = each.value
-  data_collection_rule_id = azurerm_monitor_data_collection_rule.this.id
-  description             = var.description
-  name                    = var.name
+  target_resource_id          = var.target_resource_id
+  data_collection_rule_id     = azurerm_monitor_data_collection_rule.this.id
+  description                 = var.description
+  name                        = var.name
 
   dynamic "timeouts" {
     for_each = var.monitor_data_collection_rule_association_timeouts == null ? {} : var.monitor_data_collection_rule_association_timeouts
@@ -242,24 +240,4 @@ resource "azurerm_monitor_data_collection_rule_association" "this" {
       update = timeouts.value.update
     }
   }
-}
-
-# required AVM resources interfaces
-resource "azurerm_management_lock" "this" {
-  count      = var.lock.kind != "None" ? 1 : 0
-  name       = coalesce(var.lock.name, "lock-${var.name}")
-  scope      = azurerm_monitor_data_collection_rule.this.id
-  lock_level = var.lock.kind
-}
-
-resource "azurerm_role_assignment" "this" {
-  for_each                               = var.role_assignments
-  scope                                  = azurerm_monitor_data_collection_rule.this.id
-  role_definition_id                     = strcontains(lower(each.value.role_definition_id_or_name), lower(local.role_definition_resource_substring)) ? each.value.role_definition_id_or_name : null
-  role_definition_name                   = strcontains(lower(each.value.role_definition_id_or_name), lower(local.role_definition_resource_substring)) ? null : each.value.role_definition_id_or_name
-  principal_id                           = each.value.principal_id
-  condition                              = each.value.condition
-  condition_version                      = each.value.condition_version
-  skip_service_principal_aad_check       = each.value.skip_service_principal_aad_check
-  delegated_managed_identity_resource_id = each.value.delegated_managed_identity_resource_id
 }

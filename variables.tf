@@ -17,31 +17,131 @@ variable "resource_group_name" {
 variable "location" {
   type        = string
   description = "Azure region where the resource should be deployed.  If null, the location will be inferred from the resource group location."
-}
-
-variable "avd_compute_resourcegroup" {
-  type        = string
-  description = "The name of the resource group where the AVD VM session host resources are created."
-  default     = "rg-avd-eastu-aad7-pool-compute"
-}
-
-variable "avd_vm_name" {
-  type        = string
-  description = "The name of the AVD VM session host."
-  default     = "avd-vm-aad7-2"
-}
-
-variable "create_workspace" {
-  description = "Whether to create a new Log Analytics workspace"
-  type        = bool
-  default     = true
+  default     = null
 }
 
 variable "name" {
   type        = string
-  description = "(Required) The name which should be used for this Data Collection Rule. Changing this forces a new Data Collection Rule to be created."
+  description = "The name of the this resource."
+  validation {
+    condition     = can(regex("^[a-z0-9-]{5,50}$", var.name))
+    error_message = "The name must be between 5 and 50 characters long and can only contain lowercase letters, numbers and dashes."
+  }
+}
+
+# required AVM interfaces
+# remove only if not supported by the resource
+# tflint-ignore: terraform_unused_declarations
+variable "customer_managed_key" {
+  type = object({
+    key_vault_resource_id              = optional(string)
+    key_name                           = optional(string)
+    key_version                        = optional(string, null)
+    user_assigned_identity_resource_id = optional(string, null)
+  })
+  description = "Customer managed keys that should be associated with the resource."
+  default     = {}
+}
+
+variable "diagnostic_settings" {
+  type = map(object({
+    name                                     = optional(string, null)
+    log_categories                           = optional(set(string), [])
+    log_groups                               = optional(set(string), ["allLogs"])
+    metric_categories                        = optional(set(string), ["AllMetrics"])
+    log_analytics_destination_type           = optional(string, "Dedicated")
+    workspace_resource_id                    = optional(string, null)
+    storage_account_resource_id              = optional(string, null)
+    event_hub_authorization_rule_resource_id = optional(string, null)
+    event_hub_name                           = optional(string, null)
+    marketplace_partner_resource_id          = optional(string, null)
+  }))
+  default  = {}
+  nullable = false
+
+  validation {
+    condition     = alltrue([for _, v in var.diagnostic_settings : contains(["Dedicated", "AzureDiagnostics"], v.log_analytics_destination_type)])
+    error_message = "Log analytics destination type must be one of: 'Dedicated', 'AzureDiagnostics'."
+  }
+  validation {
+    condition = alltrue(
+      [
+        for _, v in var.diagnostic_settings :
+        v.workspace_resource_id != null || v.storage_account_resource_id != null || v.event_hub_authorization_rule_resource_id != null || v.marketplace_partner_resource_id != null
+      ]
+    )
+    error_message = "At least one of `workspace_resource_id`, `storage_account_resource_id`, `marketplace_partner_resource_id`, or `event_hub_authorization_rule_resource_id`, must be set."
+  }
+  description = <<DESCRIPTION
+A map of diagnostic settings to create on the Key Vault. The map key is deliberately arbitrary to avoid issues where map keys maybe unknown at plan time.
+
+- `name` - (Optional) The name of the diagnostic setting. One will be generated if not set, however this will not be unique if you want to create multiple diagnostic setting resources.
+- `log_categories` - (Optional) A set of log categories to send to the log analytics workspace. Defaults to `[]`.
+- `log_groups` - (Optional) A set of log groups to send to the log analytics workspace. Defaults to `["allLogs"]`.
+- `metric_categories` - (Optional) A set of metric categories to send to the log analytics workspace. Defaults to `["AllMetrics"]`.
+- `log_analytics_destination_type` - (Optional) The destination type for the diagnostic setting. Possible values are `Dedicated` and `AzureDiagnostics`. Defaults to `Dedicated`.
+- `workspace_resource_id` - (Optional) The resource ID of the log analytics workspace to send logs and metrics to.
+- `storage_account_resource_id` - (Optional) The resource ID of the storage account to send logs and metrics to.
+- `event_hub_authorization_rule_resource_id` - (Optional) The resource ID of the event hub authorization rule to send logs and metrics to.
+- `event_hub_name` - (Optional) The name of the event hub. If none is specified, the default event hub will be selected.
+- `marketplace_partner_resource_id` - (Optional) The full ARM resource ID of the Marketplace resource to which you would like to send Diagnostic LogsLogs.
+DESCRIPTION
+}
+
+variable "lock" {
+  type = object({
+    name = optional(string, null)
+    kind = optional(string, "None")
+  })
+  description = "The lock level to apply. Default is `None`. Possible values are `None`, `CanNotDelete`, and `ReadOnly`."
+  default     = {}
   nullable    = false
-  default     = "microsoft-avdi-eastus"
+  validation {
+    condition     = contains(["CanNotDelete", "ReadOnly", "None"], var.lock.kind)
+    error_message = "The lock level must be one of: 'None', 'CanNotDelete', or 'ReadOnly'."
+  }
+}
+
+# tflint-ignore: terraform_unused_declarations
+variable "managed_identities" {
+  type = object({
+    system_assigned            = optional(bool, false)
+    user_assigned_resource_ids = optional(set(string), [])
+  })
+  description = "Managed identities to be created for the resource."
+  default     = {}
+}
+
+variable "role_assignments" {
+  type = map(object({
+    role_definition_id_or_name             = string
+    principal_id                           = string
+    description                            = optional(string, null)
+    skip_service_principal_aad_check       = optional(bool, false)
+    condition                              = optional(string, null)
+    condition_version                      = optional(string, null)
+    delegated_managed_identity_resource_id = optional(string, null)
+  }))
+  default     = {}
+  description = <<DESCRIPTION
+A map of role assignments to create on this resource. The map key is deliberately arbitrary to avoid issues where map keys maybe unknown at plan time.
+
+- `role_definition_id_or_name` - The ID or name of the role definition to assign to the principal.
+- `principal_id` - The ID of the principal to assign the role to.
+- `description` - The description of the role assignment.
+- `skip_service_principal_aad_check` - If set to true, skips the Azure Active Directory check for the service principal in the tenant. Defaults to false.
+- `condition` - The condition which will be used to scope the role assignment.
+- `condition_version` - The version of the condition syntax. Valid values are '2.0'.
+
+> Note: only set `skip_service_principal_aad_check` to true if you are assigning a role to a service principal.
+DESCRIPTION
+}
+
+# tflint-ignore: terraform_unused_declarations
+variable "tags" {
+  type        = map(any)
+  description = "The map of tags to be applied to the resource"
+  default     = {}
 }
 
 variable "monitor_data_collection_rule_data_flow" {
@@ -52,13 +152,13 @@ variable "monitor_data_collection_rule_data_flow" {
     streams            = list(string)
     transform_kql      = optional(string)
   }))
-  description = <<DESCRIPTION
+  description = <<-EOT
  - `built_in_transform` - (Optional) The built-in transform to transform stream data.
  - `destinations` - (Required) Specifies a list of destination names. A `azure_monitor_metrics` data source only allows for stream of kind `Microsoft-InsightsMetrics`.
  - `output_stream` - (Optional) The output stream of the transform. Only required if the data flow changes data to a different stream.
  - `streams` - (Required) Specifies a list of streams. Possible values include but not limited to `Microsoft-Event`, `Microsoft-InsightsMetrics`, `Microsoft-Perf`, `Microsoft-Syslog`, `Microsoft-WindowsEvent`, and `Microsoft-PrometheusMetrics`.
  - `transform_kql` - (Optional) The KQL query to transform stream data.
-DESCRIPTION
+EOT
   nullable    = false
 }
 
@@ -99,7 +199,7 @@ variable "monitor_data_collection_rule_destinations" {
       table_name         = string
     })))
   })
-  description = <<DESCRIPTION
+  description = <<-EOT
 
  ---
  `azure_monitor_metrics` block supports the following:
@@ -142,13 +242,19 @@ variable "monitor_data_collection_rule_destinations" {
  - `name` - (Required) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
  - `storage_account_id` - (Required) The resource ID of the Storage Account.
  - `table_name` - (Required) The Storage Table name.
-DESCRIPTION
+EOT
   nullable    = false
 }
 
 variable "monitor_data_collection_rule_location" {
   type        = string
   description = "(Required) The Azure Region where the Data Collection Rule should exist. Changing this forces a new Data Collection Rule to be created."
+  nullable    = false
+}
+
+variable "monitor_data_collection_rule_name" {
+  type        = string
+  description = "(Required) The name which should be used for this Data Collection Rule. Changing this forces a new Data Collection Rule to be created."
   nullable    = false
 }
 
@@ -231,7 +337,7 @@ variable "monitor_data_collection_rule_data_sources" {
     })))
   })
   default     = null
-  description = <<DESCRIPTION
+  description = <<-EOT
 
  ---
  `data_import` block supports the following:
@@ -309,7 +415,7 @@ variable "monitor_data_collection_rule_data_sources" {
  `windows_firewall_log` block supports the following:
  - `name` - (Required) The name which should be used for this data source. This name should be unique across all data sources regardless of type within the Data Collection Rule.
  - `streams` - (Required) Specifies a list of streams that this data source will be sent to. A stream indicates what schema will be used for this data and usually what table in Log Analytics the data will be sent to.
-DESCRIPTION
+EOT
 }
 
 variable "monitor_data_collection_rule_description" {
@@ -324,10 +430,10 @@ variable "monitor_data_collection_rule_identity" {
     type         = string
   })
   default     = null
-  description = <<DESCRIPTION
+  description = <<-EOT
  - `identity_ids` - (Optional) A list of User Assigned Managed Identity IDs to be assigned to this Data Collection Rule. Currently, up to 1 identity is supported.
  - `type` - (Required) Specifies the type of Managed Service Identity that should be configured on this Data Collection Rule. Possible values are `SystemAssigned` and `UserAssigned`.
-DESCRIPTION
+EOT
 }
 
 variable "monitor_data_collection_rule_kind" {
@@ -345,14 +451,14 @@ variable "monitor_data_collection_rule_stream_declaration" {
     }))
   }))
   default     = null
-  description = <<DESCRIPTION
+  description = <<-EOT
  - `stream_name` - (Required) The name of the custom stream. This name should be unique across all `stream_declaration` blocks.
 
  ---
  `column` block supports the following:
  - `name` - (Required) The name of the column.
  - `type` - (Required) The type of the column data. Possible values are `string`, `int`, `long`, `real`, `boolean`, `datetime`,and `dynamic`.
-DESCRIPTION
+EOT
 }
 
 variable "monitor_data_collection_rule_tags" {
@@ -369,12 +475,12 @@ variable "monitor_data_collection_rule_timeouts" {
     update = optional(string)
   })
   default     = null
-  description = <<DESCRIPTION
+  description = <<-EOT
  - `create` - (Defaults to 30 minutes) Used when creating the Data Collection Rule.
  - `delete` - (Defaults to 30 minutes) Used when deleting the Data Collection Rule.
  - `read` - (Defaults to 5 minutes) Used when retrieving the Data Collection Rule.
  - `update` - (Defaults to 30 minutes) Used when updating the Data Collection Rule.
-DESCRIPTION
+EOT
 }
 
 variable "monitor_data_collection_rule_association_target_resource_id" {
@@ -387,7 +493,7 @@ variable "monitor_data_collection_rule_association_data_collection_endpoint_id" 
   type        = string
   default     = null
   description = "(Optional) The ID of the Data Collection Endpoint which will be associated to the target resource."
-  nullable    = true
+  nullable = true
 }
 
 variable "monitor_data_collection_rule_association_data_collection_rule_id" {
@@ -428,68 +534,16 @@ variable "monitor_data_collection_rule_association_timeouts" {
     update = optional(string)
   })
   default     = null
-  description = <<DESCRIPTION
+  description = <<-EOT
  - `create` - (Defaults to 30 minutes) Used when creating the Data Collection Rule Association.
  - `delete` - (Defaults to 30 minutes) Used when deleting the Data Collection Rule Association.
  - `read` - (Defaults to 5 minutes) Used when retrieving the Data Collection Rule Association.
  - `update` - (Defaults to 30 minutes) Used when updating the Data Collection Rule Association.
-DESCRIPTION
+EOT
 }
 
-# required AVM interfaces
-variable "lock" {
-  type = object({
-    name = optional(string, null)
-    kind = optional(string, "None")
-  })
-  description = "The lock level to apply. Default is `None`. Possible values are `None`, `CanNotDelete`, and `ReadOnly`."
-  default     = {}
-  nullable    = false
-  validation {
-    condition     = contains(["CanNotDelete", "ReadOnly", "None"], var.lock.kind)
-    error_message = "The lock level must be one of: 'None', 'CanNotDelete', or 'ReadOnly'."
-  }
+variable "create_workspace" {
+  description = "Whether to create a new Log Analytics workspace"
+  type        = bool
+  default     = true
 }
-
-# tflint-ignore: terraform_unused_declarations
-variable "managed_identities" {
-  type = object({
-    system_assigned            = optional(bool, false)
-    user_assigned_resource_ids = optional(set(string), [])
-  })
-  description = "Managed identities to be created for the resource."
-  default     = {}
-}
-
-variable "role_assignments" {
-  type = map(object({
-    role_definition_id_or_name             = string
-    principal_id                           = string
-    description                            = optional(string, null)
-    skip_service_principal_aad_check       = optional(bool, false)
-    condition                              = optional(string, null)
-    condition_version                      = optional(string, null)
-    delegated_managed_identity_resource_id = optional(string, null)
-  }))
-  default     = {}
-  description = <<DESCRIPTION
-A map of role assignments to create on this resource. The map key is deliberately arbitrary to avoid issues where map keys maybe unknown at plan time.
-
-- `role_definition_id_or_name` - The ID or name of the role definition to assign to the principal.
-- `principal_id` - The ID of the principal to assign the role to.
-- `description` - The description of the role assignment.
-- `skip_service_principal_aad_check` - If set to true, skips the Azure Active Directory check for the service principal in the tenant. Defaults to false.
-- `condition` - The condition which will be used to scope the role assignment.
-- `condition_version` - The version of the condition syntax. Valid values are '2.0'.
-
-> Note: only set `skip_service_principal_aad_check` to true if you are assigning a role to a service principal.
-DESCRIPTION
-}
-
-# tflint-ignore: terraform_unused_declarations
-variable "tags" {
-  type        = map(any)
-  description = "The map of tags to be applied to the resource"
-  default     = {}
-}
-

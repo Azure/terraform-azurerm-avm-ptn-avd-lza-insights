@@ -13,22 +13,12 @@ terraform {
 }
 
 provider "azurerm" {
-  features {}
+  features {
+    resource_group {
+      prevent_deletion_if_contains_resources = false
+    }
+  }
 }
-
-## Section to provide a random Azure region for the resource group
-# This allows us to randomize the region for the resource group.
-module "regions" {
-  source  = "Azure/regions/azurerm"
-  version = ">= 0.3.0"
-}
-
-# This allows us to randomize the region for the resource group.
-resource "random_integer" "region_index" {
-  min = 0
-  max = length(module.regions.regions) - 1
-}
-## End of section to provide a random Azure region for the resource group
 
 # This ensures we have unique CAF compliant names for our resources.
 module "naming" {
@@ -36,10 +26,9 @@ module "naming" {
   version = ">= 0.3.0"
 }
 
-# This is required for resource modules
 resource "azurerm_resource_group" "this" {
-  name     = module.naming.resource_group.name_unique
-  location = module.regions.regions[random_integer.region_index.result].name
+  name     = var.resource_group_name
+  location = var.location
 }
 
 resource "azurerm_user_assigned_identity" "this" {
@@ -48,53 +37,110 @@ resource "azurerm_user_assigned_identity" "this" {
   location            = azurerm_resource_group.this.location
 }
 
-# Fetch the AVD Session Host VM ID
-data "azurerm_virtual_machine" "this" {
-  name                = var.avd_vm_name
-  resource_group_name = var.avd_compute_resourcegroup
-}
-
-# Fetch the an existing log analytics workspace for AVD resources
-data "azurerm_log_analytics_workspace" "existing" {
-  name                = var.log_analytics_workspace_name_existing
-  resource_group_name = var.log_analytics_workspace_resource_group_name != "" ? var.log_analytics_workspace_resource_group_name : azurerm_resource_group.this.name
-}
-
-# Create a new log analytics workspace for AVD resources if it doesn't exist
-resource "azurerm_log_analytics_workspace" "this" {
-  count               = local.create_workspace ? 1 : 0
+resource "azurerm_virtual_network" "this_vnet" {
+  address_space       = ["10.0.0.0/16"]
   location            = azurerm_resource_group.this.location
-  name                = var.log_analytics_workspace_name
+  name                = module.naming.virtual_network.name_unique
+  resource_group_name = azurerm_resource_group.this.name
+}
+
+resource "azurerm_subnet" "this_subnet_1" {
+  address_prefixes     = ["10.0.1.0/24"]
+  name                 = "${module.naming.subnet.name_unique}-1"
+  resource_group_name  = azurerm_resource_group.this.name
+  virtual_network_name = azurerm_virtual_network.this_vnet.name
+}
+
+resource "azurerm_network_interface" "this" {
+  name                = var.avd_network_interface_name
+  location            = azurerm_resource_group.this.location
+  resource_group_name = azurerm_resource_group.this.name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.this_subnet_1.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+
+resource "azurerm_virtual_machine" "this" {
+  name                = var.avd_vm_name
+  resource_group_name = azurerm_resource_group.this.name
+  location            = azurerm_resource_group.this.location
+  vm_size             = "Standard_D4s_v3"
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.this.id]
+  }
+
+
+  storage_image_reference {
+    publisher = "microsoftwindowsdesktop"
+    offer     = "windows-11"
+    sku       = "win11-23h2-avd"
+    version   = "latest"
+  }
+
+  storage_os_disk {
+    name              = "${var.avd_vm_name}-osdisk"
+    caching           = "ReadWrite"
+    create_option     = "FromImage"
+    managed_disk_type = "Premium_LRS"
+  }
+
+  os_profile {
+    computer_name  = var.avd_vm_name
+    admin_username = "adminuser"
+    admin_password = "Password1234!"
+  }
+
+  os_profile_windows_config {
+    provision_vm_agent = true
+  }
+
+  network_interface_ids = [azurerm_network_interface.this.id]
+}
+
+# Virtual Machine Extension for AMA agent
+resource "azurerm_virtual_machine_extension" "ama" {
+  name                      = "AzureMonitorWindowsAgent"
+  virtual_machine_id        = azurerm_virtual_machine.this.id
+  publisher                 = "Microsoft.Azure.Monitor"
+  type                      = "AzureMonitorWindowsAgent"
+  type_handler_version      = "1.22"
+  automatic_upgrade_enabled = true
+}
+
+# Create a new log analytics workspace for AVD resources to send data to
+resource "azurerm_log_analytics_workspace" "this" {
+  name                = module.naming.log_analytics_workspace.name_unique
+  location            = azurerm_resource_group.this.location
   resource_group_name = azurerm_resource_group.this.name
 }
 
 # This is the module call
-# Do not specify location here due to the randomization above.
-# Leaving location as `null` will cause the module to use the resource group location
-# with a data source.
-module "insights" {
+module "dcr" {
   source                                                      = "../../"
   enable_telemetry                                            = var.enable_telemetry
-  location                                                    = azurerm_resource_group.this.location
-  name                                                        = "microsoft-avdi-eastus"
-  monitor_data_collection_rule_kind                           = "Windows" # This is required for AVD Insights to work
-  monitor_data_collection_rule_location                       = azurerm_resource_group.this.location
   monitor_data_collection_rule_resource_group_name            = azurerm_resource_group.this.name
-  monitor_data_collection_rule_association_target_resource_id = data.azurerm_virtual_machine.this.id
+  name                                                        = "avddcr1"
+  monitor_data_collection_rule_kind                           = "Windows"
+  monitor_data_collection_rule_location                       = azurerm_resource_group.this.location
+  monitor_data_collection_rule_name                           = "microsoft-avdi-eastus"
+  monitor_data_collection_rule_association_target_resource_id = azurerm_virtual_machine_extension.ama.id
   monitor_data_collection_rule_data_flow = [
     {
-      destinations = [azurerm_log_analytics_workspace.this[0].id]
+      destinations = [azurerm_log_analytics_workspace.this.name]
       streams      = ["Microsoft-Perf", "Microsoft-Event"]
     }
   ]
   monitor_data_collection_rule_destinations = {
     log_analytics = {
-      name                                        = try(one(azurerm_log_analytics_workspace.this).name, null)
-      workspace_resource_id                       = try(one(azurerm_log_analytics_workspace.this).id, null)
-      log_analytics_workspace_resource_group_name = azurerm_resource_group.this.name
+      name                  = azurerm_log_analytics_workspace.this.name
+      workspace_resource_id = azurerm_log_analytics_workspace.this.id
     }
   }
-
   resource_group_name = azurerm_resource_group.this.name
   monitor_data_collection_rule_data_sources = {
     performance_counter = [
@@ -119,6 +165,5 @@ module "insights" {
       }
     ]
   }
-  target_resource_id = data.azurerm_virtual_machine.this.id
+  target_resource_id = azurerm_virtual_machine_extension.ama.virtual_machine_id
 }
-
