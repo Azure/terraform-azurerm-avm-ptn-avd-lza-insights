@@ -211,23 +211,6 @@ Type: `bool`
 
 Default: `true`
 
-### <a name="input_customer_managed_key"></a> [customer\_managed\_key](#input\_customer\_managed\_key)
-
-Description: Customer managed keys that should be associated with the resource.
-
-Type:
-
-```hcl
-object({
-    key_vault_resource_id              = optional(string)
-    key_name                           = optional(string)
-    key_version                        = optional(string, null)
-    user_assigned_identity_resource_id = optional(string, null)
-  })
-```
-
-Default: `{}`
-
 ### <a name="input_description"></a> [description](#input\_description)
 
 Description: (Optional) The description of the Data Collection Rule Association.
