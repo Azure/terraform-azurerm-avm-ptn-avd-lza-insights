@@ -43,6 +43,7 @@ variable "customer_managed_key" {
   default     = {}
 }
 
+
 variable "diagnostic_settings" {
   type = map(object({
     name                                     = optional(string, null)
