@@ -21,18 +21,6 @@ variable "location" {
   default     = "eastus"
 }
 
-variable "avd_compute_resourcegroup" {
-  type        = string
-  description = "The name of the resource group where the AVD VM session host resources are created."
-  default     = "rg-avd-eastu-aad7-pool-compute"
-}
-
-variable "avd_virtual_network_address_space" {
-  type        = list(string)
-  description = "The address space that is used the virtual network."
-  default     = ["10.0.10.0/24"]
-}
-
 variable "avd_vm_name" {
   type        = string
   description = "The name of the AVD VM session host."
@@ -43,10 +31,4 @@ variable "avd_network_interface_name" {
   type        = string
   description = "The name of the network interface for the AVD VM session host."
   default     = "avd-nic-aad7-5"
-}
-
-variable "create_workspace" {
-  description = "Whether to create a new Log Analytics workspace"
-  type        = bool
-  default     = true
 }

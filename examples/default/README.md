@@ -11,10 +11,6 @@ terraform {
       source  = "hashicorp/azurerm"
       version = ">= 3.7.0, < 4.0.0"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = ">= 3.5.0, < 4.0.0"
-    }
   }
 }
 
@@ -184,8 +180,6 @@ The following requirements are needed by this module:
 
 - <a name="requirement_azurerm"></a> [azurerm](#requirement\_azurerm) (>= 3.7.0, < 4.0.0)
 
-- <a name="requirement_random"></a> [random](#requirement\_random) (>= 3.5.0, < 4.0.0)
-
 ## Providers
 
 The following providers are used by this module:
@@ -214,14 +208,6 @@ No required inputs.
 
 The following input variables are optional (have default values):
 
-### <a name="input_avd_compute_resourcegroup"></a> [avd\_compute\_resourcegroup](#input\_avd\_compute\_resourcegroup)
-
-Description: The name of the resource group where the AVD VM session host resources are created.
-
-Type: `string`
-
-Default: `"rg-avd-eastu-aad7-pool-compute"`
-
 ### <a name="input_avd_network_interface_name"></a> [avd\_network\_interface\_name](#input\_avd\_network\_interface\_name)
 
 Description: The name of the network interface for the AVD VM session host.
@@ -230,20 +216,6 @@ Type: `string`
 
 Default: `"avd-nic-aad7-5"`
 
-### <a name="input_avd_virtual_network_address_space"></a> [avd\_virtual\_network\_address\_space](#input\_avd\_virtual\_network\_address\_space)
-
-Description: The address space that is used the virtual network.
-
-Type: `list(string)`
-
-Default:
-
-```json
-[
-  "10.0.10.0/24"
-]
-```
-
 ### <a name="input_avd_vm_name"></a> [avd\_vm\_name](#input\_avd\_vm\_name)
 
 Description: The name of the AVD VM session host.
@@ -251,14 +223,6 @@ Description: The name of the AVD VM session host.
 Type: `string`
 
 Default: `"avd-vm-aad7-5"`
-
-### <a name="input_create_workspace"></a> [create\_workspace](#input\_create\_workspace)
-
-Description: Whether to create a new Log Analytics workspace
-
-Type: `bool`
-
-Default: `true`
 
 ### <a name="input_enable_telemetry"></a> [enable\_telemetry](#input\_enable\_telemetry)
 
