@@ -368,7 +368,6 @@ variable "monitor_data_collection_rule_association_data_collection_endpoint_id" 
   type        = string
   default     = null
   description = "(Optional) The ID of the Data Collection Endpoint which will be associated to the target resource."
-  nullable    = true
 }
 
 variable "monitor_data_collection_rule_association_data_collection_rule_id" {
