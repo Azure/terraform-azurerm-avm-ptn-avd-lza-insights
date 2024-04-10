@@ -1,4 +1,3 @@
----
 name: e2e test
 
 on:
@@ -69,3 +68,4 @@ jobs:
     needs: testexamples
     steps:
       - run: echo "All tests passed"
+

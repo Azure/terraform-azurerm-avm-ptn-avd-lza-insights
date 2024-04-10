@@ -21,3 +21,4 @@ REM Run the make target with CONTAINER_RUNTIME
 %CONTAINER_RUNTIME% run --pull always --rm -v "%cd%":/src -w /src -e GITHUB_REPOSITORY -e GITHUB_REPOSITORY_OWNER mcr.microsoft.com/azterraform make %1
 
 ENDLOCAL
+
