@@ -1,4 +1,6 @@
 # terraform-azurerm-avm-ptn-avd-lza-insights
 
-This is a template repo for Terraform Azure Verified Modules for deploying Azure Virtual Desktop Insights
+This is a repo for Terraform Azure Verified Module for Azure Virtual Desktop Insights
 
+Features
+Data Collection Rules for Azure Virtual Desktop Insights
