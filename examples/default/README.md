@@ -236,14 +236,6 @@ Type: `string`
 
 Default: `"eastus"`
 
-### <a name="input_resource_group_name"></a> [resource\_group\_name](#input\_resource\_group\_name)
-
-Description: The resource group where the resources will be deployed.
-
-Type: `string`
-
-Default: `"rg-avd-insights"`
-
 ## Outputs
 
 No outputs.

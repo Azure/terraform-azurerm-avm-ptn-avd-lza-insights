@@ -25,10 +25,3 @@ variable "location" {
   default     = "eastus"
   description = "Azure region where the resource should be deployed.  If null, the location will be inferred from the resource group location."
 }
-
-# This is required for most resource modules
-variable "resource_group_name" {
-  type        = string
-  default     = "rg-avd-insights"
-  description = "The resource group where the resources will be deployed."
-}
