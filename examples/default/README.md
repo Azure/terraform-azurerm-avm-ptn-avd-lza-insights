@@ -26,11 +26,12 @@ provider "azurerm" {
 module "naming" {
   source  = "Azure/naming/azurerm"
   version = ">= 0.3.0"
+  suffix  = ["avd-monitoring"]
 }
 
 resource "azurerm_resource_group" "this" {
   location = var.location
-  name     = module.naming.resource_group.name
+  name     = module.naming.resource_group.name_unique
 }
 
 resource "azurerm_user_assigned_identity" "this" {
