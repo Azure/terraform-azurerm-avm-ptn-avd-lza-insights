@@ -24,7 +24,7 @@ module "naming" {
 
 resource "azurerm_resource_group" "this" {
   location = var.location
-  name     = var.resource_group_name
+  name     = module.naming.resource_group.name
 }
 
 resource "azurerm_user_assigned_identity" "this" {
