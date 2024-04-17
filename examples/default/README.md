@@ -29,14 +29,14 @@ module "naming" {
 }
 
 resource "azurerm_resource_group" "this" {
-  name     = var.resource_group_name
   location = var.location
+  name     = var.resource_group_name
 }
 
 resource "azurerm_user_assigned_identity" "this" {
+  location            = azurerm_resource_group.this.location
   name                = "uai-avd-dcr"
   resource_group_name = azurerm_resource_group.this.name
-  location            = azurerm_resource_group.this.location
 }
 
 resource "azurerm_virtual_network" "this_vnet" {
@@ -54,70 +54,64 @@ resource "azurerm_subnet" "this_subnet_1" {
 }
 
 resource "azurerm_network_interface" "this" {
-  name                = var.avd_network_interface_name
   location            = azurerm_resource_group.this.location
+  name                = var.avd_network_interface_name
   resource_group_name = azurerm_resource_group.this.name
 
   ip_configuration {
     name                          = "internal"
-    subnet_id                     = azurerm_subnet.this_subnet_1.id
     private_ip_address_allocation = "Dynamic"
+    subnet_id                     = azurerm_subnet.this_subnet_1.id
   }
 }
 
 resource "azurerm_virtual_machine" "this" {
-  name                = var.avd_vm_name
-  resource_group_name = azurerm_resource_group.this.name
-  location            = azurerm_resource_group.this.location
-  vm_size             = "Standard_D4s_v3"
+  location              = azurerm_resource_group.this.location
+  name                  = var.avd_vm_name
+  network_interface_ids = [azurerm_network_interface.this.id]
+  resource_group_name   = azurerm_resource_group.this.name
+  vm_size               = "Standard_D4s_v3"
 
+  storage_os_disk {
+    create_option     = "FromImage"
+    name              = "${var.avd_vm_name}-osdisk"
+    caching           = "ReadWrite"
+    managed_disk_type = "Premium_LRS"
+  }
   identity {
     type         = "UserAssigned"
     identity_ids = [azurerm_user_assigned_identity.this.id]
   }
-
-
-  storage_image_reference {
-    publisher = "microsoftwindowsdesktop"
-    offer     = "windows-11"
-    sku       = "win11-23h2-avd"
-    version   = "latest"
-  }
-
-  storage_os_disk {
-    name              = "${var.avd_vm_name}-osdisk"
-    caching           = "ReadWrite"
-    create_option     = "FromImage"
-    managed_disk_type = "Premium_LRS"
-  }
-
   os_profile {
-    computer_name  = var.avd_vm_name
     admin_username = "adminuser"
+    computer_name  = var.avd_vm_name
     admin_password = "Password1234!"
   }
-
   os_profile_windows_config {
     provision_vm_agent = true
   }
-
-  network_interface_ids = [azurerm_network_interface.this.id]
+  storage_image_reference {
+    offer     = "windows-11"
+    publisher = "microsoftwindowsdesktop"
+    sku       = "win11-23h2-avd"
+    version   = "latest"
+  }
 }
 
 # Virtual Machine Extension for AMA agent
 resource "azurerm_virtual_machine_extension" "ama" {
   name                      = "AzureMonitorWindowsAgent"
-  virtual_machine_id        = azurerm_virtual_machine.this.id
   publisher                 = "Microsoft.Azure.Monitor"
   type                      = "AzureMonitorWindowsAgent"
   type_handler_version      = "1.22"
+  virtual_machine_id        = azurerm_virtual_machine.this.id
   automatic_upgrade_enabled = true
 }
 
 # Create a new log analytics workspace for AVD resources to send data to
 resource "azurerm_log_analytics_workspace" "this" {
-  name                = module.naming.log_analytics_workspace.name_unique
   location            = azurerm_resource_group.this.location
+  name                = module.naming.log_analytics_workspace.name_unique
   resource_group_name = azurerm_resource_group.this.name
 }
 

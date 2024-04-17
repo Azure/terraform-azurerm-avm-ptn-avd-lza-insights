@@ -634,7 +634,7 @@ Default: `null`
 
 The following outputs are exported:
 
-### <a name="output_dcr"></a> [dcr](#output\_dcr)
+### <a name="output_resource"></a> [resource](#output\_resource)
 
 Description: The full output for the Monitor Data Collection Rule.
 
