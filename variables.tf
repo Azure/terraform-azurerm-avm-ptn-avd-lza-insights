@@ -1,3 +1,4 @@
+# tflint-ignore: terraform_unused_declarations
 variable "monitor_data_collection_rule_association_target_resource_id" {
   type        = string
   description = "(Required) The ID of the Azure Resource which to associate to a Data Collection Rule or a Data Collection Endpoint. Changing this forces a new resource to be created."
@@ -134,22 +135,10 @@ variable "name" {
   }
 }
 
-# This is required for most resource modules
-variable "resource_group_name" {
-  type        = string
-  description = "The resource group where the resources will be deployed."
-}
-
 variable "target_resource_id" {
   type        = string
   description = "(Required) The ID of the Azure Resource which to associate to a Data Collection Rule or a Data Collection Endpoint. Changing this forces a new resource to be created."
   nullable    = false
-}
-
-variable "create_workspace" {
-  type        = bool
-  default     = true
-  description = "Whether to create a new Log Analytics workspace"
 }
 
 variable "description" {
@@ -158,6 +147,7 @@ variable "description" {
   description = "(Optional) The description of the Data Collection Rule Association."
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "diagnostic_settings" {
   type = map(object({
     name                                     = optional(string, null)
@@ -213,12 +203,7 @@ If it is set to false, then no telemetry will be collected.
 DESCRIPTION
 }
 
-variable "location" {
-  type        = string
-  default     = null
-  description = "Azure region where the resource should be deployed.  If null, the location will be inferred from the resource group location."
-}
-
+# tflint-ignore: terraform_unused_declarations
 variable "lock" {
   type = object({
     kind = string
@@ -238,6 +223,7 @@ variable "lock" {
   }
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "managed_identities" {
   type = object({
     system_assigned            = optional(bool, false)
@@ -253,24 +239,28 @@ variable "managed_identities" {
   nullable    = false
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "monitor_data_collection_rule_association_data_collection_endpoint_id" {
   type        = string
   default     = null
   description = "(Optional) The ID of the Data Collection Endpoint which will be associated to the target resource."
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "monitor_data_collection_rule_association_data_collection_rule_id" {
   type        = string
   default     = null
   description = "(Optional) The ID of the Data Collection Rule which will be associated to the target resource."
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "monitor_data_collection_rule_association_description" {
   type        = string
   default     = null
   description = "(Optional) The description of the Data Collection Rule Association."
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "monitor_data_collection_rule_association_name" {
   type        = string
   default     = null
@@ -512,6 +502,7 @@ variable "monitor_data_collection_rule_timeouts" {
 EOT
 }
 
+# tflint-ignore: terraform_unused_declarations
 variable "role_assignments" {
   type = map(object({
     role_definition_id_or_name             = string
@@ -521,6 +512,7 @@ variable "role_assignments" {
     condition                              = optional(string, null)
     condition_version                      = optional(string, null)
     delegated_managed_identity_resource_id = optional(string, null)
+    principal_type                         = optional(string, null)
   }))
   default     = {}
   description = <<DESCRIPTION
