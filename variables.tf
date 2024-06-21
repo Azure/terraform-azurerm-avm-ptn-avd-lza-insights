@@ -3,6 +3,8 @@ variable "monitor_data_collection_rule_association_target_resource_id" {
   type        = string
   description = "(Required) The ID of the Azure Resource which to associate to a Data Collection Rule or a Data Collection Endpoint. Changing this forces a new resource to be created."
   nullable    = false
+  description = "(Required) The ID of the Azure Resource which to associate to a Data Collection Rule or a Data Collection Endpoint. Changing this forces a new resource to be created."
+  nullable    = false
 }
 
 variable "monitor_data_collection_rule_data_flow" {
@@ -527,6 +529,7 @@ variable "role_assignments" {
   
   > Note: only set `skip_service_principal_aad_check` to true if you are assigning a role to a service principal.
   DESCRIPTION
+  nullable    = false
   nullable    = false
 }
 
