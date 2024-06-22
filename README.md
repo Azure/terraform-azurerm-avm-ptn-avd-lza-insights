@@ -14,7 +14,7 @@ Data Collection Rules for Azure Virtual Desktop Insights
 
 The following requirements are needed by this module:
 
-- <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) (~> 1.7.0)
+- <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) (>= 1.6.6, < 2.0.0)
 
 - <a name="requirement_azurerm"></a> [azurerm](#requirement\_azurerm) (>= 3.71.0, < 4.0.0)
 
@@ -178,12 +178,6 @@ Description: The name of the this resource.
 
 Type: `string`
 
-### <a name="input_resource_group_name"></a> [resource\_group\_name](#input\_resource\_group\_name)
-
-Description: The resource group where the resources will be deployed.
-
-Type: `string`
-
 ### <a name="input_target_resource_id"></a> [target\_resource\_id](#input\_target\_resource\_id)
 
 Description: (Required) The ID of the Azure Resource which to associate to a Data Collection Rule or a Data Collection Endpoint. Changing this forces a new resource to be created.
@@ -193,14 +187,6 @@ Type: `string`
 ## Optional Inputs
 
 The following input variables are optional (have default values):
-
-### <a name="input_create_workspace"></a> [create\_workspace](#input\_create\_workspace)
-
-Description: Whether to create a new Log Analytics workspace
-
-Type: `bool`
-
-Default: `true`
 
 ### <a name="input_description"></a> [description](#input\_description)
 
@@ -253,14 +239,6 @@ If it is set to false, then no telemetry will be collected.
 Type: `bool`
 
 Default: `true`
-
-### <a name="input_location"></a> [location](#input\_location)
-
-Description: Azure region where the resource should be deployed.  If null, the location will be inferred from the resource group location.
-
-Type: `string`
-
-Default: `null`
 
 ### <a name="input_lock"></a> [lock](#input\_lock)
 
@@ -617,6 +595,7 @@ map(object({
     condition                              = optional(string, null)
     condition_version                      = optional(string, null)
     delegated_managed_identity_resource_id = optional(string, null)
+    principal_type                         = optional(string, null)
   }))
 ```
 
@@ -635,6 +614,10 @@ Default: `null`
 The following outputs are exported:
 
 ### <a name="output_resource"></a> [resource](#output\_resource)
+
+Description: The full output for the Monitor Data Collection Rule.
+
+### <a name="output_resource_id"></a> [resource\_id](#output\_resource\_id)
 
 Description: The full output for the Monitor Data Collection Rule.
 
