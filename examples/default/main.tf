@@ -132,7 +132,6 @@ module "dcr" {
       workspace_resource_id = azurerm_log_analytics_workspace.this.id
     }
   }
-  resource_group_name = azurerm_resource_group.this.name
   monitor_data_collection_rule_data_sources = {
     performance_counter = [
       {
