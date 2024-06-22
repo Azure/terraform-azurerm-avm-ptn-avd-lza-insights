@@ -204,12 +204,6 @@ DESCRIPTION
 }
 
 # tflint-ignore: terraform_unused_declarations
-variable "location" {
-  type        = string
-  default     = null
-  description = "Azure region where the resource should be deployed.  If null, the location will be inferred from the resource group location."
-}
-
 variable "lock" {
   type = object({
     kind = string
