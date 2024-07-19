@@ -5,6 +5,14 @@ terraform {
       source  = "hashicorp/azurerm"
       version = ">= 3.7.0, < 4.0.0"
     }
+    http = {
+      source  = "hashicorp/http"
+      version = "~> 3.4"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.5"
+    }
   }
 }
 
@@ -14,6 +22,11 @@ provider "azurerm" {
       prevent_deletion_if_contains_resources = false
     }
   }
+}
+
+module "regions" {
+  source  = "Azure/regions/azurerm"
+  version = "=0.8.1"
 }
 
 # This ensures we have unique CAF compliant names for our resources.
@@ -60,12 +73,65 @@ resource "azurerm_network_interface" "this" {
   }
 }
 
+data "azurerm_client_config" "current" {}
+
+# Get current IP address for use in KV firewall rules
+data "http" "ip" {
+  url = "https://api.ipify.org/"
+  retry {
+    attempts     = 5
+    max_delay_ms = 1000
+    min_delay_ms = 500
+  }
+}
+
+# Generate VM local password
+resource "random_password" "vmpass" {
+  length  = 20
+  special = true
+}
+
+# Store the password in Azure Key Vault
+resource "azurerm_key_vault_secret" "vm_password_secret" {
+  key_vault_id = module.avm_res_keyvault_vault.resource_id
+  name         = "localpassword"
+  value        = random_password.vmpass.result
+}
+
+#create a keyvault for storing the credential with RBAC for the deployment user
+module "avm_res_keyvault_vault" {
+  source                      = "Azure/avm-res-keyvault-vault/azurerm"
+  version                     = "=0.7.1"
+  tenant_id                   = data.azurerm_client_config.current.tenant_id
+  name                        = module.naming.key_vault.name_unique
+  resource_group_name         = azurerm_resource_group.this.name
+  location                    = azurerm_resource_group.this.location
+  enabled_for_disk_encryption = true
+
+  network_acls = {
+    default_action = "Allow"
+    bypass         = "AzureServices"
+    ip_rules       = ["${data.http.ip.response_body}/32"]
+  }
+
+  role_assignments = {
+    deployment_user_secrets = {
+      role_definition_id_or_name = "Key Vault Administrator"
+      principal_id               = data.azurerm_client_config.current.object_id
+    }
+  }
+
+  wait_for_rbac_before_secret_operations = {
+    create = "60s"
+  }
+}
+
 resource "azurerm_virtual_machine" "this" {
   location              = azurerm_resource_group.this.location
-  name                  = var.avd_vm_name
+  name                  = module.naming.virtual_machine.name_unique
   network_interface_ids = [azurerm_network_interface.this.id]
   resource_group_name   = azurerm_resource_group.this.name
-  vm_size               = "Standard_D4s_v3"
+  vm_size               = "Standard_D4s_v4"
 
   storage_os_disk {
     create_option     = "FromImage"
@@ -80,7 +146,7 @@ resource "azurerm_virtual_machine" "this" {
   os_profile {
     admin_username = "adminuser"
     computer_name  = var.avd_vm_name
-    admin_password = "Password1234!"
+    admin_password = azurerm_key_vault_secret.vm_password_secret.value
   }
   os_profile_windows_config {
     provision_vm_agent = true
@@ -110,7 +176,7 @@ resource "azurerm_log_analytics_workspace" "this" {
   resource_group_name = azurerm_resource_group.this.name
 }
 
-# This is the module call
+# This is the module that creates the data collection rule
 module "dcr" {
   source                                                      = "../../"
   enable_telemetry                                            = var.enable_telemetry
@@ -119,19 +185,21 @@ module "dcr" {
   monitor_data_collection_rule_kind                           = "Windows"
   monitor_data_collection_rule_location                       = azurerm_resource_group.this.location
   monitor_data_collection_rule_name                           = "microsoft-avdi-eastus"
-  monitor_data_collection_rule_association_target_resource_id = azurerm_virtual_machine_extension.ama.id
+  monitor_data_collection_rule_association_target_resource_id = azurerm_virtual_machine.this.id
   monitor_data_collection_rule_data_flow = [
     {
       destinations = [azurerm_log_analytics_workspace.this.name]
       streams      = ["Microsoft-Perf", "Microsoft-Event"]
     }
   ]
+
   monitor_data_collection_rule_destinations = {
     log_analytics = {
       name                  = azurerm_log_analytics_workspace.this.name
       workspace_resource_id = azurerm_log_analytics_workspace.this.id
     }
   }
+
   monitor_data_collection_rule_data_sources = {
     performance_counter = [
       {
@@ -155,5 +223,5 @@ module "dcr" {
       }
     ]
   }
-  target_resource_id = azurerm_virtual_machine_extension.ama.virtual_machine_id
+  target_resource_id = azurerm_virtual_machine.this.id
 }
