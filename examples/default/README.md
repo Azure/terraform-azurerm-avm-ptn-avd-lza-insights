@@ -11,6 +11,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = ">= 3.7.0, < 4.0.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.5"
+    }
   }
 }
 
@@ -20,6 +24,11 @@ provider "azurerm" {
       prevent_deletion_if_contains_resources = false
     }
   }
+}
+
+module "regions" {
+  source  = "Azure/regions/azurerm"
+  version = "=0.8.1"
 }
 
 # This ensures we have unique CAF compliant names for our resources.
@@ -66,12 +75,18 @@ resource "azurerm_network_interface" "this" {
   }
 }
 
+# Generate VM local password
+resource "random_password" "vmpass" {
+  length  = 20
+  special = true
+}
+
 resource "azurerm_virtual_machine" "this" {
   location              = azurerm_resource_group.this.location
-  name                  = var.avd_vm_name
+  name                  = module.naming.virtual_machine.name_unique
   network_interface_ids = [azurerm_network_interface.this.id]
   resource_group_name   = azurerm_resource_group.this.name
-  vm_size               = "Standard_D4s_v3"
+  vm_size               = "Standard_D4s_v4"
 
   storage_os_disk {
     create_option     = "FromImage"
@@ -86,7 +101,7 @@ resource "azurerm_virtual_machine" "this" {
   os_profile {
     admin_username = "adminuser"
     computer_name  = var.avd_vm_name
-    admin_password = "Password1234!"
+    admin_password = random_password.vmpass.result
   }
   os_profile_windows_config {
     provision_vm_agent = true
@@ -116,7 +131,7 @@ resource "azurerm_log_analytics_workspace" "this" {
   resource_group_name = azurerm_resource_group.this.name
 }
 
-# This is the module call
+# This is the module that creates the data collection rule
 module "dcr" {
   source                                                      = "../../"
   enable_telemetry                                            = var.enable_telemetry
@@ -125,19 +140,21 @@ module "dcr" {
   monitor_data_collection_rule_kind                           = "Windows"
   monitor_data_collection_rule_location                       = azurerm_resource_group.this.location
   monitor_data_collection_rule_name                           = "microsoft-avdi-eastus"
-  monitor_data_collection_rule_association_target_resource_id = azurerm_virtual_machine_extension.ama.id
+  monitor_data_collection_rule_association_target_resource_id = azurerm_virtual_machine.this.id
   monitor_data_collection_rule_data_flow = [
     {
       destinations = [azurerm_log_analytics_workspace.this.name]
       streams      = ["Microsoft-Perf", "Microsoft-Event"]
     }
   ]
+
   monitor_data_collection_rule_destinations = {
     log_analytics = {
       name                  = azurerm_log_analytics_workspace.this.name
       workspace_resource_id = azurerm_log_analytics_workspace.this.id
     }
   }
+
   monitor_data_collection_rule_data_sources = {
     performance_counter = [
       {
@@ -161,7 +178,7 @@ module "dcr" {
       }
     ]
   }
-  target_resource_id = azurerm_virtual_machine_extension.ama.virtual_machine_id
+  target_resource_id = azurerm_virtual_machine.this.id
 }
 ```
 
@@ -173,6 +190,8 @@ The following requirements are needed by this module:
 - <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) (>= 1.3.0)
 
 - <a name="requirement_azurerm"></a> [azurerm](#requirement\_azurerm) (>= 3.7.0, < 4.0.0)
+
+- <a name="requirement_random"></a> [random](#requirement\_random) (~> 3.5)
 
 ## Resources
 
@@ -186,6 +205,7 @@ The following resources are used by this module:
 - [azurerm_virtual_machine.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_machine) (resource)
 - [azurerm_virtual_machine_extension.ama](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_machine_extension) (resource)
 - [azurerm_virtual_network.this_vnet](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_network) (resource)
+- [random_password.vmpass](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) (resource)
 
 <!-- markdownlint-disable MD013 -->
 ## Required Inputs
@@ -210,7 +230,7 @@ Description: The name of the AVD VM session host.
 
 Type: `string`
 
-Default: `"avd-vm-aad7-5"`
+Default: `"vm-avdaad"`
 
 ### <a name="input_enable_telemetry"></a> [enable\_telemetry](#input\_enable\_telemetry)
 
@@ -228,7 +248,7 @@ Description: Azure region where the resource should be deployed.  If null, the l
 
 Type: `string`
 
-Default: `"eastus"`
+Default: `"eastus2"`
 
 ## Outputs
 
@@ -249,6 +269,12 @@ Version:
 Source: Azure/naming/azurerm
 
 Version: >= 0.3.0
+
+### <a name="module_regions"></a> [regions](#module\_regions)
+
+Source: Azure/regions/azurerm
+
+Version: =0.8.1
 
 <!-- markdownlint-disable-next-line MD041 -->
 ## Data Collection

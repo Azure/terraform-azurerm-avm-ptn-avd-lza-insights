@@ -6,7 +6,7 @@ variable "avd_network_interface_name" {
 
 variable "avd_vm_name" {
   type        = string
-  default     = "avd-vm-aad7-5"
+  default     = "vm-avdaad"
   description = "The name of the AVD VM session host."
 }
 
@@ -22,6 +22,6 @@ DESCRIPTION
 
 variable "location" {
   type        = string
-  default     = "eastus"
+  default     = "eastus2"
   description = "Azure region where the resource should be deployed.  If null, the location will be inferred from the resource group location."
 }
