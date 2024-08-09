@@ -58,14 +58,15 @@ resource "azurerm_subnet" "this_subnet_1" {
 }
 
 resource "azurerm_network_interface" "this" {
+  count               = var.vm_count
+  name                = "${var.avd_vm_name}-${count.index}-nic"
   location            = azurerm_resource_group.this.location
-  name                = var.avd_network_interface_name
   resource_group_name = azurerm_resource_group.this.name
 
   ip_configuration {
     name                          = "internal"
-    private_ip_address_allocation = "Dynamic"
     subnet_id                     = azurerm_subnet.this_subnet_1.id
+    private_ip_address_allocation = "Dynamic"
   }
 }
 
@@ -76,15 +77,16 @@ resource "random_password" "vmpass" {
 }
 
 resource "azurerm_virtual_machine" "this" {
+  count                 = var.vm_count
   location              = azurerm_resource_group.this.location
-  name                  = module.naming.virtual_machine.name_unique
-  network_interface_ids = [azurerm_network_interface.this.id]
+  name                  = "${module.naming.virtual_machine.name_unique}-${count.index}"
+  network_interface_ids = [element(azurerm_network_interface.this.*.id, count.index)]
   resource_group_name   = azurerm_resource_group.this.name
   vm_size               = "Standard_D4s_v4"
 
   storage_os_disk {
     create_option     = "FromImage"
-    name              = "${var.avd_vm_name}-osdisk"
+    name              = "${var.avd_vm_name}-${count.index}-osdisk"
     caching           = "ReadWrite"
     managed_disk_type = "Premium_LRS"
   }
@@ -94,7 +96,7 @@ resource "azurerm_virtual_machine" "this" {
   }
   os_profile {
     admin_username = "adminuser"
-    computer_name  = var.avd_vm_name
+    computer_name  = "${var.avd_vm_name}-${count.index}"
     admin_password = random_password.vmpass.result
   }
   os_profile_windows_config {
@@ -110,19 +112,24 @@ resource "azurerm_virtual_machine" "this" {
 
 # Virtual Machine Extension for AMA agent
 resource "azurerm_virtual_machine_extension" "ama" {
-  name                      = "AzureMonitorWindowsAgent"
+  count                     = var.vm_count
+  name                      = "AzureMonitorWindowsAgent-${count.index}"
   publisher                 = "Microsoft.Azure.Monitor"
   type                      = "AzureMonitorWindowsAgent"
   type_handler_version      = "1.22"
-  virtual_machine_id        = azurerm_virtual_machine.this.id
+  virtual_machine_id        = element(azurerm_virtual_machine.this.*.id, count.index)
   automatic_upgrade_enabled = true
 }
 
-# Create a new log analytics workspace for AVD resources to send data to
-resource "azurerm_log_analytics_workspace" "this" {
+module "azurerm_log_analytics_workspace" {
+  source              = "Azure/log-analytics-workspace/azurerm"
+  version             = "0.1.0"
   location            = azurerm_resource_group.this.location
-  name                = module.naming.log_analytics_workspace.name_unique
   resource_group_name = azurerm_resource_group.this.name
+  name                = module.naming.log_analytics_workspace.name_unique
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+  
 }
 
 # This is the module that creates the data collection rule

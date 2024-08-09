@@ -25,3 +25,9 @@ variable "location" {
   default     = "eastus2"
   description = "Azure region where the resource should be deployed.  If null, the location will be inferred from the resource group location."
 }
+
+variable "vm_count" {
+  description = "Number of virtual machines to create"
+  type        = number
+  default     = 3
+}
