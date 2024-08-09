@@ -97,17 +97,16 @@ resource "azurerm_virtual_machine" "this" {
   count = var.vm_count
 
   location              = azurerm_resource_group.this.location
-  name                  = module.naming.virtual_machine.name_unique
+  name                  = "${var.avd_vm_name}-${count.index}"
   network_interface_ids = [azurerm_network_interface.this[count.index].id]
   resource_group_name   = azurerm_resource_group.this.name
   vm_size               = "Standard_D4s_v4"
-  zones                 = random_integer.zone_index.result
 
   storage_os_disk {
     create_option     = "FromImage"
     name              = "${var.avd_vm_name}-${count.index}-osdisk"
     caching           = "ReadWrite"
-    managed_disk_type = "Premium_SSD"
+    managed_disk_type = "Premium_LRS"
   }
   identity {
     type         = "UserAssigned"
