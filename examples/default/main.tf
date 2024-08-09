@@ -57,16 +57,27 @@ resource "azurerm_subnet" "this_subnet_1" {
   virtual_network_name = azurerm_virtual_network.this_vnet.name
 }
 
-resource "azurerm_network_interface" "this" {
-  count               = var.vm_count
-  name                = "${var.avd_vm_name}-${count.index}-nic"
+# Create Azure Log Analytics workspace for Azure Virtual Desktop
+module "avm_res_operationalinsights_workspace" {
+  source              = "Azure/avm-res-operationalinsights-workspace/azurerm"
+  version             = "0.1.3"
+  enable_telemetry    = var.enable_telemetry
+  resource_group_name = azurerm_resource_group.this.name
   location            = azurerm_resource_group.this.location
+  name                = var.log_analytics_workspace_name
+}
+
+resource "azurerm_network_interface" "this" {
+  count = var.vm_count
+
+  location            = azurerm_resource_group.this.location
+  name                = "${var.avd_vm_name}-${count.index}-nic"
   resource_group_name = azurerm_resource_group.this.name
 
   ip_configuration {
     name                          = "internal"
-    subnet_id                     = azurerm_subnet.this_subnet_1.id
     private_ip_address_allocation = "Dynamic"
+    subnet_id                     = azurerm_subnet.this_subnet_1.id
   }
 }
 
@@ -77,18 +88,20 @@ resource "random_password" "vmpass" {
 }
 
 resource "azurerm_virtual_machine" "this" {
-  count                 = var.vm_count
+  count = var.vm_count
+
   location              = azurerm_resource_group.this.location
-  name                  = "${module.naming.virtual_machine.name_unique}-${count.index}"
-  network_interface_ids = [element(azurerm_network_interface.this.*.id, count.index)]
+  name                  = module.naming.virtual_machine.name_unique
+  network_interface_ids = [azurerm_network_interface.this[count.index].id]
   resource_group_name   = azurerm_resource_group.this.name
   vm_size               = "Standard_D4s_v4"
+  zones                 = random_integer.zone_index.result
 
   storage_os_disk {
     create_option     = "FromImage"
     name              = "${var.avd_vm_name}-${count.index}-osdisk"
     caching           = "ReadWrite"
-    managed_disk_type = "Premium_LRS"
+    managed_disk_type = "Premium_SSD"
   }
   identity {
     type         = "UserAssigned"
@@ -112,47 +125,37 @@ resource "azurerm_virtual_machine" "this" {
 
 # Virtual Machine Extension for AMA agent
 resource "azurerm_virtual_machine_extension" "ama" {
-  count                     = var.vm_count
+  count = var.vm_count
+
   name                      = "AzureMonitorWindowsAgent-${count.index}"
   publisher                 = "Microsoft.Azure.Monitor"
   type                      = "AzureMonitorWindowsAgent"
   type_handler_version      = "1.22"
-  virtual_machine_id        = element(azurerm_virtual_machine.this.*.id, count.index)
+  virtual_machine_id        = azurerm_virtual_machine.this[count.index].id
   automatic_upgrade_enabled = true
-}
 
-module "azurerm_log_analytics_workspace" {
-  source              = "Azure/log-analytics-workspace/azurerm"
-  version             = "0.1.0"
-  location            = azurerm_resource_group.this.location
-  resource_group_name = azurerm_resource_group.this.name
-  name                = module.naming.log_analytics_workspace.name_unique
-  sku                 = "PerGB2018"
-  retention_in_days   = 30
-  
+  depends_on = [module.dcr]
 }
 
 # This is the module that creates the data collection rule
 module "dcr" {
-  source                                                      = "../../"
-  enable_telemetry                                            = var.enable_telemetry
-  monitor_data_collection_rule_resource_group_name            = azurerm_resource_group.this.name
-  name                                                        = "avddcr1"
-  monitor_data_collection_rule_kind                           = "Windows"
-  monitor_data_collection_rule_location                       = azurerm_resource_group.this.location
-  monitor_data_collection_rule_name                           = "microsoft-avdi-eastus"
-  monitor_data_collection_rule_association_target_resource_id = azurerm_virtual_machine.this.id
+  source                                           = "../../"
+  enable_telemetry                                 = var.enable_telemetry
+  monitor_data_collection_rule_resource_group_name = azurerm_resource_group.this.name
+  monitor_data_collection_rule_kind                = "Windows"
+  monitor_data_collection_rule_location            = azurerm_resource_group.this.location
+  monitor_data_collection_rule_name                = "microsoft-avdi-eastus"
   monitor_data_collection_rule_data_flow = [
     {
-      destinations = [azurerm_log_analytics_workspace.this.name]
+      destinations = [module.avm_res_operationalinsights_workspace.resource.name]
       streams      = ["Microsoft-Perf", "Microsoft-Event"]
     }
   ]
 
   monitor_data_collection_rule_destinations = {
     log_analytics = {
-      name                  = azurerm_log_analytics_workspace.this.name
-      workspace_resource_id = azurerm_log_analytics_workspace.this.id
+      name                  = module.avm_res_operationalinsights_workspace.resource.name
+      workspace_resource_id = module.avm_res_operationalinsights_workspace.resource.id
     }
   }
 
@@ -167,7 +170,7 @@ module "dcr" {
       {
         counter_specifiers            = ["\\LogicalDisk(C:)\\% Free Space", "\\LogicalDisk(C:)\\Avg. Disk sec/Transfer", "\\Terminal Services(*)\\Active Sessions", "\\Terminal Services(*)\\Inactive Sessions", "\\Terminal Services(*)\\Total Sessions"]
         name                          = "perfCounterDataSource30"
-        sampling_frequency_in_seconds = 60
+        sampling_frequency_in_seconds = 30
         streams                       = ["Microsoft-Perf"]
       }
     ],
@@ -179,5 +182,13 @@ module "dcr" {
       }
     ]
   }
-  target_resource_id = azurerm_virtual_machine.this.id
+}
+
+# Creates an association between an Azure Monitor data collection rule and a virtual machine.
+resource "azurerm_monitor_data_collection_rule_association" "example" {
+  count = var.vm_count
+
+  target_resource_id      = azurerm_virtual_machine.this[count.index].id
+  data_collection_rule_id = module.dcr.resource.id
+  name                    = "${var.avd_vm_name}-association-${count.index}"
 }

@@ -63,9 +63,21 @@ resource "azurerm_subnet" "this_subnet_1" {
   virtual_network_name = azurerm_virtual_network.this_vnet.name
 }
 
-resource "azurerm_network_interface" "this" {
+# Create Azure Log Analytics workspace for Azure Virtual Desktop
+module "avm_res_operationalinsights_workspace" {
+  source              = "Azure/avm-res-operationalinsights-workspace/azurerm"
+  version             = "0.1.3"
+  enable_telemetry    = var.enable_telemetry
+  resource_group_name = azurerm_resource_group.this.name
   location            = azurerm_resource_group.this.location
-  name                = var.avd_network_interface_name
+  name                = var.log_analytics_workspace_name
+}
+
+resource "azurerm_network_interface" "this" {
+  count = var.vm_count
+
+  location            = azurerm_resource_group.this.location
+  name                = "${var.avd_vm_name}-${count.index}-nic"
   resource_group_name = azurerm_resource_group.this.name
 
   ip_configuration {
@@ -82,17 +94,20 @@ resource "random_password" "vmpass" {
 }
 
 resource "azurerm_virtual_machine" "this" {
+  count = var.vm_count
+
   location              = azurerm_resource_group.this.location
   name                  = module.naming.virtual_machine.name_unique
-  network_interface_ids = [azurerm_network_interface.this.id]
+  network_interface_ids = [azurerm_network_interface.this[count.index].id]
   resource_group_name   = azurerm_resource_group.this.name
   vm_size               = "Standard_D4s_v4"
+  zones                 = random_integer.zone_index.result
 
   storage_os_disk {
     create_option     = "FromImage"
-    name              = "${var.avd_vm_name}-osdisk"
+    name              = "${var.avd_vm_name}-${count.index}-osdisk"
     caching           = "ReadWrite"
-    managed_disk_type = "Premium_LRS"
+    managed_disk_type = "Premium_SSD"
   }
   identity {
     type         = "UserAssigned"
@@ -100,7 +115,7 @@ resource "azurerm_virtual_machine" "this" {
   }
   os_profile {
     admin_username = "adminuser"
-    computer_name  = var.avd_vm_name
+    computer_name  = "${var.avd_vm_name}-${count.index}"
     admin_password = random_password.vmpass.result
   }
   os_profile_windows_config {
@@ -116,42 +131,37 @@ resource "azurerm_virtual_machine" "this" {
 
 # Virtual Machine Extension for AMA agent
 resource "azurerm_virtual_machine_extension" "ama" {
-  name                      = "AzureMonitorWindowsAgent"
+  count = var.vm_count
+
+  name                      = "AzureMonitorWindowsAgent-${count.index}"
   publisher                 = "Microsoft.Azure.Monitor"
   type                      = "AzureMonitorWindowsAgent"
   type_handler_version      = "1.22"
-  virtual_machine_id        = azurerm_virtual_machine.this.id
+  virtual_machine_id        = azurerm_virtual_machine.this[count.index].id
   automatic_upgrade_enabled = true
-}
 
-# Create a new log analytics workspace for AVD resources to send data to
-resource "azurerm_log_analytics_workspace" "this" {
-  location            = azurerm_resource_group.this.location
-  name                = module.naming.log_analytics_workspace.name_unique
-  resource_group_name = azurerm_resource_group.this.name
+  depends_on = [module.dcr]
 }
 
 # This is the module that creates the data collection rule
 module "dcr" {
-  source                                                      = "../../"
-  enable_telemetry                                            = var.enable_telemetry
-  monitor_data_collection_rule_resource_group_name            = azurerm_resource_group.this.name
-  name                                                        = "avddcr1"
-  monitor_data_collection_rule_kind                           = "Windows"
-  monitor_data_collection_rule_location                       = azurerm_resource_group.this.location
-  monitor_data_collection_rule_name                           = "microsoft-avdi-eastus"
-  monitor_data_collection_rule_association_target_resource_id = azurerm_virtual_machine.this.id
+  source                                           = "../../"
+  enable_telemetry                                 = var.enable_telemetry
+  monitor_data_collection_rule_resource_group_name = azurerm_resource_group.this.name
+  monitor_data_collection_rule_kind                = "Windows"
+  monitor_data_collection_rule_location            = azurerm_resource_group.this.location
+  monitor_data_collection_rule_name                = "microsoft-avdi-eastus"
   monitor_data_collection_rule_data_flow = [
     {
-      destinations = [azurerm_log_analytics_workspace.this.name]
+      destinations = [module.avm_res_operationalinsights_workspace.resource.name]
       streams      = ["Microsoft-Perf", "Microsoft-Event"]
     }
   ]
 
   monitor_data_collection_rule_destinations = {
     log_analytics = {
-      name                  = azurerm_log_analytics_workspace.this.name
-      workspace_resource_id = azurerm_log_analytics_workspace.this.id
+      name                  = module.avm_res_operationalinsights_workspace.resource.name
+      workspace_resource_id = module.avm_res_operationalinsights_workspace.resource.id
     }
   }
 
@@ -166,7 +176,7 @@ module "dcr" {
       {
         counter_specifiers            = ["\\LogicalDisk(C:)\\% Free Space", "\\LogicalDisk(C:)\\Avg. Disk sec/Transfer", "\\Terminal Services(*)\\Active Sessions", "\\Terminal Services(*)\\Inactive Sessions", "\\Terminal Services(*)\\Total Sessions"]
         name                          = "perfCounterDataSource30"
-        sampling_frequency_in_seconds = 60
+        sampling_frequency_in_seconds = 30
         streams                       = ["Microsoft-Perf"]
       }
     ],
@@ -178,7 +188,15 @@ module "dcr" {
       }
     ]
   }
-  target_resource_id = azurerm_virtual_machine.this.id
+}
+
+# Creates an association between an Azure Monitor data collection rule and a virtual machine.
+resource "azurerm_monitor_data_collection_rule_association" "example" {
+  count = var.vm_count
+
+  target_resource_id      = azurerm_virtual_machine.this[count.index].id
+  data_collection_rule_id = module.dcr.resource.id
+  name                    = "${var.avd_vm_name}-association-${count.index}"
 }
 ```
 
@@ -197,7 +215,7 @@ The following requirements are needed by this module:
 
 The following resources are used by this module:
 
-- [azurerm_log_analytics_workspace.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/log_analytics_workspace) (resource)
+- [azurerm_monitor_data_collection_rule_association.example](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/monitor_data_collection_rule_association) (resource)
 - [azurerm_network_interface.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/network_interface) (resource)
 - [azurerm_resource_group.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) (resource)
 - [azurerm_subnet.this_subnet_1](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) (resource)
@@ -216,17 +234,9 @@ No required inputs.
 
 The following input variables are optional (have default values):
 
-### <a name="input_avd_network_interface_name"></a> [avd\_network\_interface\_name](#input\_avd\_network\_interface\_name)
-
-Description: The name of the network interface for the AVD VM session host.
-
-Type: `string`
-
-Default: `"avd-nic-aad7-5"`
-
 ### <a name="input_avd_vm_name"></a> [avd\_vm\_name](#input\_avd\_vm\_name)
 
-Description: The name of the AVD VM session host.
+Description: Base name for the Azure Virtual Desktop VMs
 
 Type: `string`
 
@@ -250,6 +260,22 @@ Type: `string`
 
 Default: `"eastus2"`
 
+### <a name="input_log_analytics_workspace_name"></a> [log\_analytics\_workspace\_name](#input\_log\_analytics\_workspace\_name)
+
+Description: The name of the Log Analytics workspace for Azure Virtual Desktop.
+
+Type: `string`
+
+Default: `"avd-log-analytics-workspace"`
+
+### <a name="input_vm_count"></a> [vm\_count](#input\_vm\_count)
+
+Description: Number of virtual machines to create
+
+Type: `number`
+
+Default: `3`
+
 ## Outputs
 
 No outputs.
@@ -257,6 +283,12 @@ No outputs.
 ## Modules
 
 The following Modules are called:
+
+### <a name="module_avm_res_operationalinsights_workspace"></a> [avm\_res\_operationalinsights\_workspace](#module\_avm\_res\_operationalinsights\_workspace)
+
+Source: Azure/avm-res-operationalinsights-workspace/azurerm
+
+Version: 0.1.3
 
 ### <a name="module_dcr"></a> [dcr](#module\_dcr)
 

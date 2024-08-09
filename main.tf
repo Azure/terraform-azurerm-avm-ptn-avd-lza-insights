@@ -225,19 +225,3 @@ resource "azurerm_monitor_data_collection_rule" "this" {
   }
 }
 
-resource "azurerm_monitor_data_collection_rule_association" "this" {
-  target_resource_id      = var.target_resource_id
-  data_collection_rule_id = azurerm_monitor_data_collection_rule.this.id
-  description             = var.description
-  name                    = var.name
-
-  dynamic "timeouts" {
-    for_each = var.monitor_data_collection_rule_association_timeouts == null ? {} : var.monitor_data_collection_rule_association_timeouts
-    content {
-      create = timeouts.value.create
-      delete = timeouts.value.delete
-      read   = timeouts.value.read
-      update = timeouts.value.update
-    }
-  }
-}
