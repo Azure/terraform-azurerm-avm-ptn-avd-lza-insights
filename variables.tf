@@ -1,10 +1,3 @@
-# tflint-ignore: terraform_unused_declarations
-variable "monitor_data_collection_rule_association_target_resource_id" {
-  type        = string
-  description = "(Required) The ID of the Azure Resource which to associate to a Data Collection Rule or a Data Collection Endpoint. Changing this forces a new resource to be created."
-  nullable    = false
-}
-
 variable "monitor_data_collection_rule_data_flow" {
   type = list(object({
     built_in_transform = optional(string)
@@ -117,34 +110,17 @@ variable "monitor_data_collection_rule_name" {
   type        = string
   description = "(Required) The name which should be used for this Data Collection Rule. Changing this forces a new Data Collection Rule to be created."
   nullable    = false
+
+  validation {
+    condition     = can(regex("^microsoft-avdi-", var.monitor_data_collection_rule_name))
+    error_message = "The name must start with 'microsoft-avdi-'."
+  }
 }
 
 variable "monitor_data_collection_rule_resource_group_name" {
   type        = string
   description = "(Required) The name of the Resource Group where the Data Collection Rule should exist. Changing this forces a new Data Collection Rule to be created."
   nullable    = false
-}
-
-variable "name" {
-  type        = string
-  description = "The name of the this resource."
-
-  validation {
-    condition     = can(regex("^[a-z0-9-]{5,50}$", var.name))
-    error_message = "The name must be between 5 and 50 characters long and can only contain lowercase letters, numbers and dashes."
-  }
-}
-
-variable "target_resource_id" {
-  type        = string
-  description = "(Required) The ID of the Azure Resource which to associate to a Data Collection Rule or a Data Collection Endpoint. Changing this forces a new resource to be created."
-  nullable    = false
-}
-
-variable "description" {
-  type        = string
-  default     = null
-  description = "(Optional) The description of the Data Collection Rule Association."
 }
 
 # tflint-ignore: terraform_unused_declarations
@@ -265,22 +241,6 @@ variable "monitor_data_collection_rule_association_name" {
   type        = string
   default     = null
   description = "(Optional) The name which should be used for this Data Collection Rule Association. Changing this forces a new Data Collection Rule Association to be created. Defaults to `configurationAccessEndpoint`."
-}
-
-variable "monitor_data_collection_rule_association_timeouts" {
-  type = object({
-    create = optional(string)
-    delete = optional(string)
-    read   = optional(string)
-    update = optional(string)
-  })
-  default     = null
-  description = <<-EOT
- - `create` - (Defaults to 30 minutes) Used when creating the Data Collection Rule Association.
- - `delete` - (Defaults to 30 minutes) Used when deleting the Data Collection Rule Association.
- - `read` - (Defaults to 5 minutes) Used when retrieving the Data Collection Rule Association.
- - `update` - (Defaults to 30 minutes) Used when updating the Data Collection Rule Association.
-EOT
 }
 
 variable "monitor_data_collection_rule_data_collection_endpoint_id" {

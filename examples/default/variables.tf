@@ -1,13 +1,7 @@
-variable "avd_network_interface_name" {
-  type        = string
-  default     = "avd-nic-aad7-5"
-  description = "The name of the network interface for the AVD VM session host."
-}
-
 variable "avd_vm_name" {
   type        = string
   default     = "vm-avdaad"
-  description = "The name of the AVD VM session host."
+  description = "Base name for the Azure Virtual Desktop VMs"
 }
 
 variable "enable_telemetry" {
@@ -24,4 +18,16 @@ variable "location" {
   type        = string
   default     = "eastus2"
   description = "Azure region where the resource should be deployed.  If null, the location will be inferred from the resource group location."
+}
+
+variable "log_analytics_workspace_name" {
+  type        = string
+  default     = "avd-log-analytics-workspace"
+  description = "The name of the Log Analytics workspace for Azure Virtual Desktop."
+}
+
+variable "vm_count" {
+  type        = number
+  default     = 3
+  description = "Number of virtual machines to create"
 }

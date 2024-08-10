@@ -27,7 +27,6 @@ The following requirements are needed by this module:
 The following resources are used by this module:
 
 - [azurerm_monitor_data_collection_rule.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/monitor_data_collection_rule) (resource)
-- [azurerm_monitor_data_collection_rule_association.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/monitor_data_collection_rule_association) (resource)
 - [modtm_telemetry.telemetry](https://registry.terraform.io/providers/azure/modtm/latest/docs/resources/telemetry) (resource)
 - [random_uuid.telemetry](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/uuid) (resource)
 - [azurerm_client_config.telemetry](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/client_config) (data source)
@@ -37,12 +36,6 @@ The following resources are used by this module:
 ## Required Inputs
 
 The following input variables are required:
-
-### <a name="input_monitor_data_collection_rule_association_target_resource_id"></a> [monitor\_data\_collection\_rule\_association\_target\_resource\_id](#input\_monitor\_data\_collection\_rule\_association\_target\_resource\_id)
-
-Description: (Required) The ID of the Azure Resource which to associate to a Data Collection Rule or a Data Collection Endpoint. Changing this forces a new resource to be created.
-
-Type: `string`
 
 ### <a name="input_monitor_data_collection_rule_data_flow"></a> [monitor\_data\_collection\_rule\_data\_flow](#input\_monitor\_data\_collection\_rule\_data\_flow)
 
@@ -168,29 +161,9 @@ Description: (Required) The name of the Resource Group where the Data Collection
 
 Type: `string`
 
-### <a name="input_name"></a> [name](#input\_name)
-
-Description: The name of the this resource.
-
-Type: `string`
-
-### <a name="input_target_resource_id"></a> [target\_resource\_id](#input\_target\_resource\_id)
-
-Description: (Required) The ID of the Azure Resource which to associate to a Data Collection Rule or a Data Collection Endpoint. Changing this forces a new resource to be created.
-
-Type: `string`
-
 ## Optional Inputs
 
 The following input variables are optional (have default values):
-
-### <a name="input_description"></a> [description](#input\_description)
-
-Description: (Optional) The description of the Data Collection Rule Association.
-
-Type: `string`
-
-Default: `null`
 
 ### <a name="input_diagnostic_settings"></a> [diagnostic\_settings](#input\_diagnostic\_settings)
 
@@ -301,26 +274,6 @@ Default: `null`
 Description: (Optional) The name which should be used for this Data Collection Rule Association. Changing this forces a new Data Collection Rule Association to be created. Defaults to `configurationAccessEndpoint`.
 
 Type: `string`
-
-Default: `null`
-
-### <a name="input_monitor_data_collection_rule_association_timeouts"></a> [monitor\_data\_collection\_rule\_association\_timeouts](#input\_monitor\_data\_collection\_rule\_association\_timeouts)
-
-Description: - `create` - (Defaults to 30 minutes) Used when creating the Data Collection Rule Association.
-- `delete` - (Defaults to 30 minutes) Used when deleting the Data Collection Rule Association.
-- `read` - (Defaults to 5 minutes) Used when retrieving the Data Collection Rule Association.
-- `update` - (Defaults to 30 minutes) Used when updating the Data Collection Rule Association.
-
-Type:
-
-```hcl
-object({
-    create = optional(string)
-    delete = optional(string)
-    read   = optional(string)
-    update = optional(string)
-  })
-```
 
 Default: `null`
 
