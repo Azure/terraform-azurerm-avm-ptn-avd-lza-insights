@@ -12,10 +12,14 @@ terraform {
   }
 }
 
+# Data block to get the subscription ID
+data "azurerm_client_config" "example" {}
+
+
 provider "azurerm" {
   features {}
 
-  subscription_id = var.subscription_id
+  subscription_id = data.azurerm_client_config.example.subscription_id
 }
 
 
