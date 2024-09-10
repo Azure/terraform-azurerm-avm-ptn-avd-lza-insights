@@ -16,99 +16,14 @@ EOT
   nullable    = false
 }
 
-variable "monitor_data_collection_rule_destinations" {
-  type = object({
-    azure_monitor_metrics = optional(object({
-      name = string
-    }))
-    event_hub = optional(object({
-      event_hub_id = string
-      name         = string
-    }))
-    event_hub_direct = optional(object({
-      event_hub_id = string
-      name         = string
-    }))
-    log_analytics = optional(object({
-      name                  = string
-      workspace_resource_id = string
-    }))
-    monitor_account = optional(list(object({
-      monitor_account_id = string
-      name               = string
-    })))
-    storage_blob = optional(list(object({
-      container_name     = string
-      name               = string
-      storage_account_id = string
-    })))
-    storage_blob_direct = optional(list(object({
-      container_name     = string
-      name               = string
-      storage_account_id = string
-    })))
-    storage_table_direct = optional(list(object({
-      name               = string
-      storage_account_id = string
-      table_name         = string
-    })))
-  })
-  description = <<-EOT
-
- ---
- `azure_monitor_metrics` block supports the following:
- - `name` - (Required) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
-
- ---
- `event_hub` block supports the following:
- - `event_hub_id` - (Required) The resource ID of the Event Hub.
- - `name` - (Required) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
-
- ---
- `event_hub_direct` block supports the following:
- - `event_hub_id` - (Required) The resource ID of the Event Hub.
- - `name` - (Required) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
-
- ---
- `log_analytics` block supports the following:
- - `name` - (Required) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
- - `workspace_resource_id` - (Required) The ID of a Log Analytic Workspace resource.
-
- ---
- `monitor_account` block supports the following:
- - `monitor_account_id` - (Required) The resource ID of the Monitor Account.
- - `name` - (Required) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
-
- ---
- `storage_blob` block supports the following:
- - `container_name` - (Required) The Storage Container name.
- - `name` - (Required) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
- - `storage_account_id` - (Required) The resource ID of the Storage Account.
-
- ---
- `storage_blob_direct` block supports the following:
- - `container_name` - (Required) The Storage Container name.
- - `name` - (Required) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
- - `storage_account_id` - (Required) The resource ID of the Storage Account.
-
- ---
- `storage_table_direct` block supports the following:
- - `name` - (Required) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
- - `storage_account_id` - (Required) The resource ID of the Storage Account.
- - `table_name` - (Required) The Storage Table name.
-EOT
-  nullable    = false
-}
-
 variable "monitor_data_collection_rule_location" {
   type        = string
-  description = "(Required) The Azure Region where the Data Collection Rule should exist. Changing this forces a new Data Collection Rule to be created."
-  nullable    = false
+  description = "(Optional) The Azure Region where the Data Collection Rule should exist. Changing this forces a new Data Collection Rule to be created."
 }
 
 variable "monitor_data_collection_rule_name" {
   type        = string
-  description = "(Required) The name which should be used for this Data Collection Rule. Changing this forces a new Data Collection Rule to be created."
+  description = "(Optional) The name which should be used for this Data Collection Rule. Changing this forces a new Data Collection Rule to be created."
   nullable    = false
 
   validation {
@@ -119,7 +34,7 @@ variable "monitor_data_collection_rule_name" {
 
 variable "monitor_data_collection_rule_resource_group_name" {
   type        = string
-  description = "(Required) The name of the Resource Group where the Data Collection Rule should exist. Changing this forces a new Data Collection Rule to be created."
+  description = "The name of the Resource Group where the Data Collection Rule should exist. Changing this forces a new Data Collection Rule to be created."
   nullable    = false
 }
 
@@ -401,6 +316,91 @@ variable "monitor_data_collection_rule_description" {
   type        = string
   default     = null
   description = "(Optional) The description of the Data Collection Rule."
+}
+
+variable "monitor_data_collection_rule_destinations" {
+  type = object({
+    azure_monitor_metrics = optional(object({
+      name = optional(string)
+    }))
+    event_hub = optional(object({
+      event_hub_id = optional(string)
+      name         = optional(string)
+    }))
+    event_hub_direct = optional(object({
+      event_hub_id = optional(string)
+      name         = optional(string)
+    }))
+    log_analytics = optional(object({
+      name                  = optional(string)
+      workspace_resource_id = optional(string)
+    }))
+    monitor_account = optional(list(object({
+      monitor_account_id = optional(string)
+      name               = optional(string)
+    })))
+    storage_blob = optional(list(object({
+      container_name     = optional(string)
+      name               = optional(string)
+      storage_account_id = optional(string)
+    })))
+    storage_blob_direct = optional(list(object({
+      container_name     = optional(string)
+      name               = optional(string)
+      storage_account_id = optional(string)
+    })))
+    storage_table_direct = optional(list(object({
+      name               = optional(string)
+      storage_account_id = optional(string)
+      table_name         = optional(string)
+    })))
+  })
+  default     = {}
+  description = <<-EOT
+
+ ---
+ `azure_monitor_metrics` block supports the following:
+ - `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
+
+ ---
+ `event_hub` block supports the following:
+ - `event_hub_id` - (Optional) The resource ID of the Event Hub.
+ - `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
+
+ ---
+ `event_hub_direct` block supports the following:
+ - `event_hub_id` - (Optional) The resource ID of the Event Hub.
+ - `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
+
+ ---
+ `log_analytics` block supports the following:
+ - `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
+ - `workspace_resource_id` - (Optional) The ID of a Log Analytic Workspace resource.
+
+ ---
+ `monitor_account` block supports the following:
+ - `monitor_account_id` - (Optional) The resource ID of the Monitor Account.
+ - `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
+
+ ---
+ `storage_blob` block supports the following:
+ - `container_name` - (Optional) The Storage Container name.
+ - `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
+ - `storage_account_id` - (Optional) The resource ID of the Storage Account.
+
+ ---
+ `storage_blob_direct` block supports the following:
+ - `container_name` - (Optional) The Storage Container name.
+ - `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
+ - `storage_account_id` - (Optional) The resource ID of the Storage Account.
+
+ ---
+ `storage_table_direct` block supports the following:
+ - `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
+ - `storage_account_id` - (Optional) The resource ID of the Storage Account.
+ - `table_name` - (Optional) The Storage Table name.
+EOT
+  nullable    = false
 }
 
 variable "monitor_data_collection_rule_identity" {

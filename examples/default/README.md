@@ -5,7 +5,7 @@ This deploys the module in its simplest form.
 
 ```hcl
 terraform {
-  required_version = ">= 1.3.0"
+  required_version = ">= 1.9.5"
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -19,17 +19,11 @@ terraform {
 }
 
 provider "azurerm" {
-  features {
-    resource_group {
-      prevent_deletion_if_contains_resources = false
-    }
-  }
+  features {}
+
+  subscription_id = var.subscription_id
 }
 
-module "regions" {
-  source  = "Azure/regions/azurerm"
-  version = "=0.8.1"
-}
 
 # This ensures we have unique CAF compliant names for our resources.
 module "naming" {
@@ -64,13 +58,11 @@ resource "azurerm_subnet" "this_subnet_1" {
 }
 
 # Create Azure Log Analytics workspace for Azure Virtual Desktop
-module "avm_res_operationalinsights_workspace" {
-  source              = "Azure/avm-res-operationalinsights-workspace/azurerm"
-  version             = "0.1.3"
-  enable_telemetry    = var.enable_telemetry
-  resource_group_name = azurerm_resource_group.this.name
+resource "azurerm_log_analytics_workspace" "this" {
   location            = azurerm_resource_group.this.location
   name                = var.log_analytics_workspace_name
+  resource_group_name = azurerm_resource_group.this.name
+  sku                 = "PerGB2018"
 }
 
 resource "azurerm_network_interface" "this" {
@@ -93,34 +85,29 @@ resource "random_password" "vmpass" {
   special = true
 }
 
-resource "azurerm_virtual_machine" "this" {
+resource "azurerm_windows_virtual_machine" "this" {
   count = var.vm_count
 
-  location              = azurerm_resource_group.this.location
-  name                  = "${var.avd_vm_name}-${count.index}"
-  network_interface_ids = [azurerm_network_interface.this[count.index].id]
-  resource_group_name   = azurerm_resource_group.this.name
-  vm_size               = "Standard_D4s_v4"
+  admin_password             = random_password.vmpass.result
+  admin_username             = "adminuser"
+  location                   = azurerm_resource_group.this.location
+  name                       = "${var.avd_vm_name}-${count.index}"
+  network_interface_ids      = [azurerm_network_interface.this[count.index].id]
+  resource_group_name        = azurerm_resource_group.this.name
+  size                       = "Standard_D4s_v4"
+  computer_name              = "${var.avd_vm_name}-${count.index}"
+  encryption_at_host_enabled = true
 
-  storage_os_disk {
-    create_option     = "FromImage"
-    name              = "${var.avd_vm_name}-${count.index}-osdisk"
-    caching           = "ReadWrite"
-    managed_disk_type = "Premium_LRS"
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Premium_LRS"
+    name                 = "${var.avd_vm_name}-${count.index}-osdisk"
   }
   identity {
     type         = "UserAssigned"
     identity_ids = [azurerm_user_assigned_identity.this.id]
   }
-  os_profile {
-    admin_username = "adminuser"
-    computer_name  = "${var.avd_vm_name}-${count.index}"
-    admin_password = random_password.vmpass.result
-  }
-  os_profile_windows_config {
-    provision_vm_agent = true
-  }
-  storage_image_reference {
+  source_image_reference {
     offer     = "windows-11"
     publisher = "microsoftwindowsdesktop"
     sku       = "win11-23h2-avd"
@@ -136,7 +123,7 @@ resource "azurerm_virtual_machine_extension" "ama" {
   publisher                 = "Microsoft.Azure.Monitor"
   type                      = "AzureMonitorWindowsAgent"
   type_handler_version      = "1.22"
-  virtual_machine_id        = azurerm_virtual_machine.this[count.index].id
+  virtual_machine_id        = azurerm_windows_virtual_machine.this[count.index].id
   automatic_upgrade_enabled = true
 
   depends_on = [module.dcr]
@@ -152,15 +139,15 @@ module "dcr" {
   monitor_data_collection_rule_name                = "microsoft-avdi-eastus"
   monitor_data_collection_rule_data_flow = [
     {
-      destinations = [module.avm_res_operationalinsights_workspace.resource.name]
+      destinations = [azurerm_log_analytics_workspace.this.name]
       streams      = ["Microsoft-Perf", "Microsoft-Event"]
     }
   ]
 
   monitor_data_collection_rule_destinations = {
     log_analytics = {
-      name                  = module.avm_res_operationalinsights_workspace.resource.name
-      workspace_resource_id = module.avm_res_operationalinsights_workspace.resource.id
+      name                  = azurerm_log_analytics_workspace.this.name
+      workspace_resource_id = azurerm_log_analytics_workspace.this.id
     }
   }
 
@@ -193,7 +180,7 @@ module "dcr" {
 resource "azurerm_monitor_data_collection_rule_association" "example" {
   count = var.vm_count
 
-  target_resource_id      = azurerm_virtual_machine.this[count.index].id
+  target_resource_id      = azurerm_windows_virtual_machine.this[count.index].id
   data_collection_rule_id = module.dcr.resource.id
   name                    = "${var.avd_vm_name}-association-${count.index}"
 }
@@ -204,7 +191,7 @@ resource "azurerm_monitor_data_collection_rule_association" "example" {
 
 The following requirements are needed by this module:
 
-- <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) (>= 1.3.0)
+- <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) (>= 1.9.5)
 
 - <a name="requirement_azurerm"></a> [azurerm](#requirement\_azurerm) (>= 3.7.0, < 4.0.0)
 
@@ -214,20 +201,27 @@ The following requirements are needed by this module:
 
 The following resources are used by this module:
 
+- [azurerm_log_analytics_workspace.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/log_analytics_workspace) (resource)
 - [azurerm_monitor_data_collection_rule_association.example](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/monitor_data_collection_rule_association) (resource)
 - [azurerm_network_interface.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/network_interface) (resource)
 - [azurerm_resource_group.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) (resource)
 - [azurerm_subnet.this_subnet_1](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) (resource)
 - [azurerm_user_assigned_identity.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/user_assigned_identity) (resource)
-- [azurerm_virtual_machine.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_machine) (resource)
 - [azurerm_virtual_machine_extension.ama](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_machine_extension) (resource)
 - [azurerm_virtual_network.this_vnet](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_network) (resource)
+- [azurerm_windows_virtual_machine.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/windows_virtual_machine) (resource)
 - [random_password.vmpass](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) (resource)
 
 <!-- markdownlint-disable MD013 -->
 ## Required Inputs
 
-No required inputs.
+The following input variables are required:
+
+### <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id)
+
+Description: The subscription ID for the Azure account.
+
+Type: `string`
 
 ## Optional Inputs
 
@@ -283,12 +277,6 @@ No outputs.
 
 The following Modules are called:
 
-### <a name="module_avm_res_operationalinsights_workspace"></a> [avm\_res\_operationalinsights\_workspace](#module\_avm\_res\_operationalinsights\_workspace)
-
-Source: Azure/avm-res-operationalinsights-workspace/azurerm
-
-Version: 0.1.3
-
 ### <a name="module_dcr"></a> [dcr](#module\_dcr)
 
 Source: ../../
@@ -300,12 +288,6 @@ Version:
 Source: Azure/naming/azurerm
 
 Version: >= 0.3.0
-
-### <a name="module_regions"></a> [regions](#module\_regions)
-
-Source: Azure/regions/azurerm
-
-Version: =0.8.1
 
 <!-- markdownlint-disable-next-line MD041 -->
 ## Data Collection
