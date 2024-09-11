@@ -26,6 +26,12 @@ variable "log_analytics_workspace_name" {
   description = "The name of the Log Analytics workspace for Azure Virtual Desktop."
 }
 
+variable "subscription_id" {
+  type        = string
+  default     = "20000000-0000-0000-0000-000000000000"
+  description = "The Azure subscription ID."
+}
+
 variable "vm_count" {
   type        = number
   default     = 3

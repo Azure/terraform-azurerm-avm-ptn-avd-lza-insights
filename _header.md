@@ -7,3 +7,5 @@ Azure Verified Module to deploy Azure Virtual Desktop Insights
 
 Features
 Data Collection Rules for Azure Virtual Desktop Insights
+
+*This module has been tested and validated to work with version 4.0.0 of the azurerm provider and is backward compatible.*
