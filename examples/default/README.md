@@ -218,13 +218,7 @@ The following resources are used by this module:
 <!-- markdownlint-disable MD013 -->
 ## Required Inputs
 
-The following input variables are required:
-
-### <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id)
-
-Description: The Azure subscription ID.
-
-Type: `string`
+No required inputs.
 
 ## Optional Inputs
 
@@ -263,6 +257,14 @@ Description: The name of the Log Analytics workspace for Azure Virtual Desktop.
 Type: `string`
 
 Default: `"avd-log-analytics-workspace"`
+
+### <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id)
+
+Description: The Azure subscription ID.
+
+Type: `string`
+
+Default: `"00000000-0000-0000-0000-000000000000"`
 
 ### <a name="input_vm_count"></a> [vm\_count](#input\_vm\_count)
 

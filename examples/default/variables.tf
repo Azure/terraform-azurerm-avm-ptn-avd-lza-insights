@@ -1,9 +1,3 @@
-variable "subscription_id" {
-  type        = string
-  default = "00000000-0000-0000-0000-000000000000"
-  description = "The Azure subscription ID."
-}
-
 variable "avd_vm_name" {
   type        = string
   default     = "vm-avdaad"
@@ -30,6 +24,12 @@ variable "log_analytics_workspace_name" {
   type        = string
   default     = "avd-log-analytics-workspace"
   description = "The name of the Log Analytics workspace for Azure Virtual Desktop."
+}
+
+variable "subscription_id" {
+  type        = string
+  default     = "00000000-0000-0000-0000-000000000000"
+  description = "The Azure subscription ID."
 }
 
 variable "vm_count" {
