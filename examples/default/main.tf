@@ -12,14 +12,10 @@ terraform {
   }
 }
 
-# Data block to get the subscription ID
-data "azurerm_client_config" "example" {}
-
-
 provider "azurerm" {
   features {}
 
-  subscription_id = data.azurerm_client_config.example.subscription_id
+  subscription_id = var.subscription_id
 }
 
 
@@ -33,6 +29,9 @@ module "naming" {
 resource "azurerm_resource_group" "this" {
   location = var.location
   name     = module.naming.resource_group.name_unique
+  tags = {
+    subscription_id = var.subscription_id
+  }
 }
 
 resource "azurerm_user_assigned_identity" "this" {

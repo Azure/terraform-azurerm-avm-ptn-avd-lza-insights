@@ -18,14 +18,10 @@ terraform {
   }
 }
 
-# Data block to get the subscription ID
-data "azurerm_client_config" "example" {}
-
-
 provider "azurerm" {
   features {}
 
-  subscription_id = data.azurerm_client_config.example.subscription_id
+  subscription_id = var.subscription_id
 }
 
 
@@ -39,6 +35,9 @@ module "naming" {
 resource "azurerm_resource_group" "this" {
   location = var.location
   name     = module.naming.resource_group.name_unique
+  tags = {
+    subscription_id = var.subscription_id
+  }
 }
 
 resource "azurerm_user_assigned_identity" "this" {
@@ -215,7 +214,6 @@ The following resources are used by this module:
 - [azurerm_virtual_network.this_vnet](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_network) (resource)
 - [azurerm_windows_virtual_machine.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/windows_virtual_machine) (resource)
 - [random_password.vmpass](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) (resource)
-- [azurerm_client_config.example](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/client_config) (data source)
 
 <!-- markdownlint-disable MD013 -->
 ## Required Inputs
@@ -224,7 +222,7 @@ The following input variables are required:
 
 ### <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id)
 
-Description: The subscription ID for the Azure account.
+Description: The Azure subscription ID.
 
 Type: `string`
 
