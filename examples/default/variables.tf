@@ -28,7 +28,7 @@ variable "log_analytics_workspace_name" {
 
 variable "subscription_id" {
   type        = string
-  default     = "00000000-0000-0000-0000-000000000000"
+  default     = "20000000-0000-0000-0000-000000000000"
   description = "The Azure subscription ID."
 }
 

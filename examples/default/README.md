@@ -264,7 +264,7 @@ Description: The Azure subscription ID.
 
 Type: `string`
 
-Default: `"00000000-0000-0000-0000-000000000000"`
+Default: `"20000000-0000-0000-0000-000000000000"`
 
 ### <a name="input_vm_count"></a> [vm\_count](#input\_vm\_count)
 
