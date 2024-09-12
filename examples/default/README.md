@@ -20,8 +20,8 @@ terraform {
 
 provider "azurerm" {
   features {}
+  subscription_id = var.subscription_id
 }
-
 
 # This ensures we have unique CAF compliant names for our resources.
 module "naming" {
@@ -216,7 +216,13 @@ The following resources are used by this module:
 <!-- markdownlint-disable MD013 -->
 ## Required Inputs
 
-No required inputs.
+The following input variables are required:
+
+### <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id)
+
+Description: The Azure subscription ID.
+
+Type: `string`
 
 ## Optional Inputs
 
@@ -255,14 +261,6 @@ Description: The name of the Log Analytics workspace for Azure Virtual Desktop.
 Type: `string`
 
 Default: `"avd-log-analytics-workspace"`
-
-### <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id)
-
-Description: The Azure subscription ID.
-
-Type: `string`
-
-Default: `"20000000-0000-0000-0000-000000000000"`
 
 ### <a name="input_vm_count"></a> [vm\_count](#input\_vm\_count)
 
