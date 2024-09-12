@@ -3,7 +3,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = ">= 3.x.y, < 5.0.0"
+      version = ">= 3.71.0, < 5.0.0"
     }
     random = {
       source  = "hashicorp/random"
@@ -14,10 +14,7 @@ terraform {
 
 provider "azurerm" {
   features {}
-
-  subscription_id = var.subscription_id
 }
-
 
 # This ensures we have unique CAF compliant names for our resources.
 module "naming" {
