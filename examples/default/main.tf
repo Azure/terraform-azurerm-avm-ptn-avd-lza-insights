@@ -17,6 +17,7 @@ provider "azurerm" {
   subscription_id = var.subscription_id
 }
 
+
 # This ensures we have unique CAF compliant names for our resources.
 module "naming" {
   source  = "Azure/naming/azurerm"
@@ -24,54 +25,59 @@ module "naming" {
   suffix  = ["avd-monitoring"]
 }
 
-data "azurerm_resource_group" "this" {
-  name = "rg-avddemo"
+resource "azurerm_resource_group" "this" {
+  location = var.location
+  name     = module.naming.resource_group.name
+  
 }
 
-data "azurerm_virtual_desktop_host_pool" "this" {
+resource "azurerm_virtual_desktop_host_pool" "this" {
   name                = "vdpool-entraid-001"
-  resource_group_name = data.azurerm_resource_group.this.name
-  
+  resource_group_name = azurerm_resource_group.this.name
+  location            = var.location
+  type                = "Pooled"
+  load_balancer_type  = "BreadthFirst"
 }
 
 # Registration information for the host pool.
 resource "azurerm_virtual_desktop_host_pool_registration_info" "registrationinfo" {
-  hostpool_id = data.azurerm_virtual_desktop_host_pool.this.id
+  hostpool_id = azurerm_virtual_desktop_host_pool.this.id
   # Generating RFC3339Time for the expiration of the token. 
   expiration_date = timeadd(timestamp(), "48h")
 }
 
 resource "azurerm_user_assigned_identity" "this" {
-  location            = data.azurerm_resource_group.this.location
+  location            = azurerm_resource_group.this.location
   name                = "uai-avd-dcr"
-  resource_group_name = data.azurerm_resource_group.this.name
+  resource_group_name = azurerm_resource_group.this.name
 }
 
 resource "azurerm_virtual_network" "this_vnet" {
   address_space       = ["10.0.0.0/16"]
-  location            = data.azurerm_resource_group.this.location
+  location            = azurerm_resource_group.this.location
   name                = module.naming.virtual_network.name_unique
-  resource_group_name = data.azurerm_resource_group.this.name
+  resource_group_name = azurerm_resource_group.this.name
 }
 
 resource "azurerm_subnet" "this_subnet_1" {
   address_prefixes     = ["10.0.1.0/24"]
   name                 = "${module.naming.subnet.name_unique}-1"
-  resource_group_name  = data.azurerm_resource_group.this.name
+  resource_group_name  = azurerm_resource_group.this.name
   virtual_network_name = azurerm_virtual_network.this_vnet.name
 }
 
-data "azurerm_log_analytics_workspace" "this" {
+resource "azurerm_log_analytics_workspace" "this" {
   name                = "log-xbis"
-  resource_group_name = data.azurerm_resource_group.this.name
+  location            = azurerm_resource_group.this.location
+  resource_group_name = azurerm_resource_group.this.name
 }
 
 resource "azurerm_network_interface" "this" {
   count = var.vm_count
 
-  location            = data.azurerm_resource_group.this.location
+  location            = azurerm_resource_group.this.location
   name                = "${var.avd_vm_name}-${count.index}-nic"
-  resource_group_name = data.azurerm_resource_group.this.name
+  resource_group_name = azurerm_resource_group.this.name
 
   ip_configuration {
     name                          = "internal"
@@ -91,10 +97,10 @@ resource "azurerm_windows_virtual_machine" "this" {
 
   admin_password             = random_password.vmpass.result
   admin_username             = "adminuser"
-  location                   = data.azurerm_resource_group.this.location
+  location                   = azurerm_resource_group.this.location
   name                       = "${var.avd_vm_name}-${count.index}"
   network_interface_ids      = [azurerm_network_interface.this[count.index].id]
-  resource_group_name        = data.azurerm_resource_group.this.name
+  resource_group_name        = azurerm_resource_group.this.name
   size                       = "Standard_D4s_v4"
   computer_name              = "${var.avd_vm_name}-${count.index}"
   encryption_at_host_enabled = true
@@ -189,21 +195,21 @@ resource "azurerm_virtual_machine_extension" "aadjoin" {
 module "dcr" {
   source                                           = "../../"
   enable_telemetry                                 = var.enable_telemetry
-  monitor_data_collection_rule_resource_group_name = data.azurerm_resource_group.this.name
+  monitor_data_collection_rule_resource_group_name = azurerm_resource_group.this.name
   monitor_data_collection_rule_kind                = "Windows"
-  monitor_data_collection_rule_location            = data.azurerm_resource_group.this.location
+  monitor_data_collection_rule_location            = azurerm_resource_group.this.location
   monitor_data_collection_rule_name                = "microsoft-avdi-eastus"
   monitor_data_collection_rule_data_flow = [
     {
-      destinations = [data.azurerm_log_analytics_workspace.this.name]
+      destinations = [azurerm_log_analytics_workspace.this.name]
       streams      = ["Microsoft-Perf", "Microsoft-Event"]
     }
   ]
 
   monitor_data_collection_rule_destinations = {
     log_analytics = {
-      name                  = data.azurerm_log_analytics_workspace.this.name
-      workspace_resource_id = data.azurerm_log_analytics_workspace.this.id
+      name                  = azurerm_log_analytics_workspace.this.name
+      workspace_resource_id = azurerm_log_analytics_workspace.this.id
     }
   }
 
