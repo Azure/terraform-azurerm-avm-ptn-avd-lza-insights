@@ -24,48 +24,54 @@ module "naming" {
   suffix  = ["avd-monitoring"]
 }
 
-resource "azurerm_resource_group" "this" {
-  location = var.location
-  name     = module.naming.resource_group.name_unique
-  tags = {
-    subscription_id = var.subscription_id
-  }
+data "azurerm_resource_group" "this" {
+  name = "rg-avddemo"
+}
+
+data "azurerm_virtual_desktop_host_pool" "this" {
+  name                = "vdpool-entraid-001"
+  resource_group_name = data.azurerm_resource_group.this.name
+  
+}
+
+# Registration information for the host pool.
+resource "azurerm_virtual_desktop_host_pool_registration_info" "registrationinfo" {
+  hostpool_id = data.azurerm_virtual_desktop_host_pool.this.id
+  # Generating RFC3339Time for the expiration of the token. 
+  expiration_date = timeadd(timestamp(), "48h")
 }
 
 resource "azurerm_user_assigned_identity" "this" {
-  location            = azurerm_resource_group.this.location
+  location            = data.azurerm_resource_group.this.location
   name                = "uai-avd-dcr"
-  resource_group_name = azurerm_resource_group.this.name
+  resource_group_name = data.azurerm_resource_group.this.name
 }
 
 resource "azurerm_virtual_network" "this_vnet" {
   address_space       = ["10.0.0.0/16"]
-  location            = azurerm_resource_group.this.location
+  location            = data.azurerm_resource_group.this.location
   name                = module.naming.virtual_network.name_unique
-  resource_group_name = azurerm_resource_group.this.name
+  resource_group_name = data.azurerm_resource_group.this.name
 }
 
 resource "azurerm_subnet" "this_subnet_1" {
   address_prefixes     = ["10.0.1.0/24"]
   name                 = "${module.naming.subnet.name_unique}-1"
-  resource_group_name  = azurerm_resource_group.this.name
+  resource_group_name  = data.azurerm_resource_group.this.name
   virtual_network_name = azurerm_virtual_network.this_vnet.name
 }
 
-# Create Azure Log Analytics workspace for Azure Virtual Desktop
-resource "azurerm_log_analytics_workspace" "this" {
-  location            = azurerm_resource_group.this.location
-  name                = var.log_analytics_workspace_name
-  resource_group_name = azurerm_resource_group.this.name
-  sku                 = "PerGB2018"
+data "azurerm_log_analytics_workspace" "this" {
+  name                = "log-xbis"
+  resource_group_name = data.azurerm_resource_group.this.name
 }
 
 resource "azurerm_network_interface" "this" {
   count = var.vm_count
 
-  location            = azurerm_resource_group.this.location
+  location            = data.azurerm_resource_group.this.location
   name                = "${var.avd_vm_name}-${count.index}-nic"
-  resource_group_name = azurerm_resource_group.this.name
+  resource_group_name = data.azurerm_resource_group.this.name
 
   ip_configuration {
     name                          = "internal"
@@ -85,13 +91,14 @@ resource "azurerm_windows_virtual_machine" "this" {
 
   admin_password             = random_password.vmpass.result
   admin_username             = "adminuser"
-  location                   = azurerm_resource_group.this.location
+  location                   = data.azurerm_resource_group.this.location
   name                       = "${var.avd_vm_name}-${count.index}"
   network_interface_ids      = [azurerm_network_interface.this[count.index].id]
-  resource_group_name        = azurerm_resource_group.this.name
+  resource_group_name        = data.azurerm_resource_group.this.name
   size                       = "Standard_D4s_v4"
   computer_name              = "${var.avd_vm_name}-${count.index}"
   encryption_at_host_enabled = true
+  
 
   os_disk {
     caching              = "ReadWrite"
@@ -124,25 +131,79 @@ resource "azurerm_virtual_machine_extension" "ama" {
   depends_on = [module.dcr]
 }
 
+# Virtual Machine Extension for AVD Agent
+resource "azurerm_virtual_machine_extension" "vmext_dsc" {
+  count = var.vm_count
+
+  name                       = "AVDAgent-${count.index}"
+  publisher                  = "Microsoft.Powershell"
+  type                       = "DSC"
+  type_handler_version       = "2.73"
+  virtual_machine_id         = azurerm_windows_virtual_machine.this[count.index].id
+  auto_upgrade_minor_version = true
+  protected_settings         = <<PROTECTED_SETTINGS
+  {
+    "properties": {
+      "registrationInfoToken": "${local.registration_token}"
+    }
+  }
+PROTECTED_SETTINGS
+
+  settings                   = <<-SETTINGS
+    {
+      "modulesUrl": "https://wvdportalstorageblob.blob.core.windows.net/galleryartifacts/Configuration_1.0.02714.342.zip",
+      "configurationFunction": "Configuration.ps1\\AddSessionHost",
+      "properties": {
+        "HostPoolName":"vdpool-avd-001"
+      }
+    }
+SETTINGS
+
+  depends_on = [module.dcr]
+}
+
+# Microsoft Antimalware
+resource "azurerm_virtual_machine_extension" "mal" {
+  name                       = "IaaSAntimalware"
+  count                      = var.vm_count
+  virtual_machine_id         = azurerm_windows_virtual_machine.this[count.index].id
+  publisher                  = "Microsoft.Azure.Security"
+  type                       = "IaaSAntimalware"
+  type_handler_version       = "1.3"
+  auto_upgrade_minor_version = "true"
+
+  depends_on = [module.dcr]
+}
+
+resource "azurerm_virtual_machine_extension" "aadjoin" {
+  count                      = var.vm_count
+  name                       = "${var.avd_vm_name}-${count.index}-aadJoin"
+  virtual_machine_id         = azurerm_windows_virtual_machine.this[count.index].id
+  publisher                  = "Microsoft.Azure.ActiveDirectory"
+  type                       = "AADLoginForWindows"
+  type_handler_version       = "1.0"
+  auto_upgrade_minor_version = true
+}
+
 # This is the module that creates the data collection rule
 module "dcr" {
   source                                           = "../../"
   enable_telemetry                                 = var.enable_telemetry
-  monitor_data_collection_rule_resource_group_name = azurerm_resource_group.this.name
+  monitor_data_collection_rule_resource_group_name = data.azurerm_resource_group.this.name
   monitor_data_collection_rule_kind                = "Windows"
-  monitor_data_collection_rule_location            = azurerm_resource_group.this.location
+  monitor_data_collection_rule_location            = data.azurerm_resource_group.this.location
   monitor_data_collection_rule_name                = "microsoft-avdi-eastus"
   monitor_data_collection_rule_data_flow = [
     {
-      destinations = [azurerm_log_analytics_workspace.this.name]
+      destinations = [data.azurerm_log_analytics_workspace.this.name]
       streams      = ["Microsoft-Perf", "Microsoft-Event"]
     }
   ]
 
   monitor_data_collection_rule_destinations = {
     log_analytics = {
-      name                  = azurerm_log_analytics_workspace.this.name
-      workspace_resource_id = azurerm_log_analytics_workspace.this.id
+      name                  = data.azurerm_log_analytics_workspace.this.name
+      workspace_resource_id = data.azurerm_log_analytics_workspace.this.id
     }
   }
 
