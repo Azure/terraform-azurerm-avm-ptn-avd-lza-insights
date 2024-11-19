@@ -23,7 +23,7 @@ variable "monitor_data_collection_rule_location" {
 
 variable "monitor_data_collection_rule_name" {
   type        = string
-  description = "(Optional) The name which should be used for this Data Collection Rule. Changing this forces a new Data Collection Rule to be created."
+  description = "(Required) The name which should be used for this Data Collection Rule. Changing this forces a new Data Collection Rule to be created."
   nullable    = false
 
   validation {

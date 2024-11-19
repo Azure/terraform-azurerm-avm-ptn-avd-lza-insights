@@ -67,7 +67,7 @@ Type: `string`
 
 ### <a name="input_monitor_data_collection_rule_name"></a> [monitor\_data\_collection\_rule\_name](#input\_monitor\_data\_collection\_rule\_name)
 
-Description: (Optional) The name which should be used for this Data Collection Rule. Changing this forces a new Data Collection Rule to be created.
+Description: (Required) The name which should be used for this Data Collection Rule. Changing this forces a new Data Collection Rule to be created.
 
 Type: `string`
 

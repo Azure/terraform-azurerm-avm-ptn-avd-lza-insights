@@ -1,6 +1,6 @@
 variable "subscription_id" {
   type        = string
-  description = "The Azure subscription ID."
+  description = "The subscription ID for the Azure account."
 }
 
 variable "avd_vm_name" {
@@ -33,6 +33,6 @@ variable "log_analytics_workspace_name" {
 
 variable "vm_count" {
   type        = number
-  default     = 3
+  default     = 2
   description = "Number of virtual machines to create"
 }
