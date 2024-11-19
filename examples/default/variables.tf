@@ -1,7 +1,8 @@
 variable "subscription_id" {
-  description = "The subscription ID for the Azure account."
   type        = string
+  description = "The subscription ID for the Azure account."
 }
+
 variable "avd_vm_name" {
   type        = string
   default     = "vm-avdaad"

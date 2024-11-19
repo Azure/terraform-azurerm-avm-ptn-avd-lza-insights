@@ -23,6 +23,7 @@ provider "azurerm" {
   subscription_id = var.subscription_id
 }
 
+
 # This ensures we have unique CAF compliant names for our resources.
 module "naming" {
   source  = "Azure/naming/azurerm"
@@ -32,10 +33,23 @@ module "naming" {
 
 resource "azurerm_resource_group" "this" {
   location = var.location
-  name     = module.naming.resource_group.name_unique
-  tags = {
-    subscription_id = var.subscription_id
-  }
+  name     = module.naming.resource_group.name
+  tags     = local.tags
+}
+
+resource "azurerm_virtual_desktop_host_pool" "this" {
+  load_balancer_type  = "BreadthFirst"
+  location            = var.location
+  name                = "vdpool-entraid-001"
+  resource_group_name = azurerm_resource_group.this.name
+  type                = "Pooled"
+}
+
+# Registration information for the host pool.
+resource "azurerm_virtual_desktop_host_pool_registration_info" "registrationinfo" {
+  # Generating RFC3339Time for the expiration of the token. 
+  expiration_date = timeadd(timestamp(), "48h")
+  hostpool_id     = azurerm_virtual_desktop_host_pool.this.id
 }
 
 resource "azurerm_user_assigned_identity" "this" {
@@ -58,12 +72,10 @@ resource "azurerm_subnet" "this_subnet_1" {
   virtual_network_name = azurerm_virtual_network.this_vnet.name
 }
 
-# Create Azure Log Analytics workspace for Azure Virtual Desktop
 resource "azurerm_log_analytics_workspace" "this" {
   location            = azurerm_resource_group.this.location
   name                = var.log_analytics_workspace_name
   resource_group_name = azurerm_resource_group.this.name
-  sku                 = "PerGB2018"
 }
 
 resource "azurerm_network_interface" "this" {
@@ -128,6 +140,61 @@ resource "azurerm_virtual_machine_extension" "ama" {
   automatic_upgrade_enabled = true
 
   depends_on = [module.dcr]
+}
+
+# Virtual Machine Extension for AVD Agent
+resource "azurerm_virtual_machine_extension" "vmext_dsc" {
+  count = var.vm_count
+
+  name                       = "AVDAgent-${count.index}"
+  publisher                  = "Microsoft.Powershell"
+  type                       = "DSC"
+  type_handler_version       = "2.73"
+  virtual_machine_id         = azurerm_windows_virtual_machine.this[count.index].id
+  auto_upgrade_minor_version = true
+  protected_settings         = <<PROTECTED_SETTINGS
+  {
+    "properties": {
+      "registrationInfoToken": "${local.registration_token}"
+    }
+  }
+PROTECTED_SETTINGS
+  settings                   = <<-SETTINGS
+    {
+      "modulesUrl": "https://wvdportalstorageblob.blob.core.windows.net/galleryartifacts/Configuration_1.0.02714.342.zip",
+      "configurationFunction": "Configuration.ps1\\AddSessionHost",
+      "properties": {
+        "HostPoolName":"vdpool-avd-001"
+      }
+    }
+SETTINGS
+
+  depends_on = [module.dcr]
+}
+
+# Microsoft Antimalware
+resource "azurerm_virtual_machine_extension" "mal" {
+  count = var.vm_count
+
+  name                       = "IaaSAntimalware"
+  publisher                  = "Microsoft.Azure.Security"
+  type                       = "IaaSAntimalware"
+  type_handler_version       = "1.3"
+  virtual_machine_id         = azurerm_windows_virtual_machine.this[count.index].id
+  auto_upgrade_minor_version = "true"
+
+  depends_on = [module.dcr]
+}
+
+resource "azurerm_virtual_machine_extension" "aadjoin" {
+  count = var.vm_count
+
+  name                       = "${var.avd_vm_name}-${count.index}-aadJoin"
+  publisher                  = "Microsoft.Azure.ActiveDirectory"
+  type                       = "AADLoginForWindows"
+  type_handler_version       = "1.0"
+  virtual_machine_id         = azurerm_windows_virtual_machine.this[count.index].id
+  auto_upgrade_minor_version = true
 }
 
 # This is the module that creates the data collection rule
@@ -208,7 +275,12 @@ The following resources are used by this module:
 - [azurerm_resource_group.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) (resource)
 - [azurerm_subnet.this_subnet_1](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) (resource)
 - [azurerm_user_assigned_identity.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/user_assigned_identity) (resource)
+- [azurerm_virtual_desktop_host_pool.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_desktop_host_pool) (resource)
+- [azurerm_virtual_desktop_host_pool_registration_info.registrationinfo](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_desktop_host_pool_registration_info) (resource)
+- [azurerm_virtual_machine_extension.aadjoin](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_machine_extension) (resource)
 - [azurerm_virtual_machine_extension.ama](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_machine_extension) (resource)
+- [azurerm_virtual_machine_extension.mal](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_machine_extension) (resource)
+- [azurerm_virtual_machine_extension.vmext_dsc](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_machine_extension) (resource)
 - [azurerm_virtual_network.this_vnet](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/virtual_network) (resource)
 - [azurerm_windows_virtual_machine.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/windows_virtual_machine) (resource)
 - [random_password.vmpass](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) (resource)
@@ -220,7 +292,7 @@ The following input variables are required:
 
 ### <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id)
 
-Description: The Azure subscription ID.
+Description: The subscription ID for the Azure account.
 
 Type: `string`
 
@@ -268,7 +340,7 @@ Description: Number of virtual machines to create
 
 Type: `number`
 
-Default: `3`
+Default: `2`
 
 ## Outputs
 

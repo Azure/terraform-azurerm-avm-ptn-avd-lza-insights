@@ -28,22 +28,22 @@ module "naming" {
 resource "azurerm_resource_group" "this" {
   location = var.location
   name     = module.naming.resource_group.name
-  
+  tags     = local.tags
 }
 
 resource "azurerm_virtual_desktop_host_pool" "this" {
+  load_balancer_type  = "BreadthFirst"
+  location            = var.location
   name                = "vdpool-entraid-001"
   resource_group_name = azurerm_resource_group.this.name
-  location            = var.location
   type                = "Pooled"
-  load_balancer_type  = "BreadthFirst"
 }
 
 # Registration information for the host pool.
 resource "azurerm_virtual_desktop_host_pool_registration_info" "registrationinfo" {
-  hostpool_id = azurerm_virtual_desktop_host_pool.this.id
   # Generating RFC3339Time for the expiration of the token. 
   expiration_date = timeadd(timestamp(), "48h")
+  hostpool_id     = azurerm_virtual_desktop_host_pool.this.id
 }
 
 resource "azurerm_user_assigned_identity" "this" {
@@ -67,8 +67,8 @@ resource "azurerm_subnet" "this_subnet_1" {
 }
 
 resource "azurerm_log_analytics_workspace" "this" {
-  name                = "log-xbis"
   location            = azurerm_resource_group.this.location
+  name                = var.log_analytics_workspace_name
   resource_group_name = azurerm_resource_group.this.name
 }
 
@@ -104,7 +104,6 @@ resource "azurerm_windows_virtual_machine" "this" {
   size                       = "Standard_D4s_v4"
   computer_name              = "${var.avd_vm_name}-${count.index}"
   encryption_at_host_enabled = true
-  
 
   os_disk {
     caching              = "ReadWrite"
@@ -154,7 +153,6 @@ resource "azurerm_virtual_machine_extension" "vmext_dsc" {
     }
   }
 PROTECTED_SETTINGS
-
   settings                   = <<-SETTINGS
     {
       "modulesUrl": "https://wvdportalstorageblob.blob.core.windows.net/galleryartifacts/Configuration_1.0.02714.342.zip",
@@ -170,24 +168,26 @@ SETTINGS
 
 # Microsoft Antimalware
 resource "azurerm_virtual_machine_extension" "mal" {
+  count = var.vm_count
+
   name                       = "IaaSAntimalware"
-  count                      = var.vm_count
-  virtual_machine_id         = azurerm_windows_virtual_machine.this[count.index].id
   publisher                  = "Microsoft.Azure.Security"
   type                       = "IaaSAntimalware"
   type_handler_version       = "1.3"
+  virtual_machine_id         = azurerm_windows_virtual_machine.this[count.index].id
   auto_upgrade_minor_version = "true"
 
   depends_on = [module.dcr]
 }
 
 resource "azurerm_virtual_machine_extension" "aadjoin" {
-  count                      = var.vm_count
+  count = var.vm_count
+
   name                       = "${var.avd_vm_name}-${count.index}-aadJoin"
-  virtual_machine_id         = azurerm_windows_virtual_machine.this[count.index].id
   publisher                  = "Microsoft.Azure.ActiveDirectory"
   type                       = "AADLoginForWindows"
   type_handler_version       = "1.0"
+  virtual_machine_id         = azurerm_windows_virtual_machine.this[count.index].id
   auto_upgrade_minor_version = true
 }
 
