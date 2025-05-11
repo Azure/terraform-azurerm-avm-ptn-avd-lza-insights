@@ -22,7 +22,8 @@ provider "azurerm" {
 module "naming" {
   source  = "Azure/naming/azurerm"
   version = ">= 0.3.0"
-  suffix  = ["avd-monitoring"]
+
+  suffix = ["avd-monitoring"]
 }
 
 resource "azurerm_resource_group" "this" {
@@ -193,26 +194,18 @@ resource "azurerm_virtual_machine_extension" "aadjoin" {
 
 # This is the module that creates the data collection rule
 module "dcr" {
-  source                                           = "../../"
-  enable_telemetry                                 = var.enable_telemetry
-  monitor_data_collection_rule_resource_group_name = azurerm_resource_group.this.name
-  monitor_data_collection_rule_kind                = "Windows"
-  monitor_data_collection_rule_location            = azurerm_resource_group.this.location
-  monitor_data_collection_rule_name                = "microsoft-avdi-eastus"
+  source = "../../"
+
   monitor_data_collection_rule_data_flow = [
     {
       destinations = [azurerm_log_analytics_workspace.this.name]
       streams      = ["Microsoft-Perf", "Microsoft-Event"]
     }
   ]
-
-  monitor_data_collection_rule_destinations = {
-    log_analytics = {
-      name                  = azurerm_log_analytics_workspace.this.name
-      workspace_resource_id = azurerm_log_analytics_workspace.this.id
-    }
-  }
-
+  monitor_data_collection_rule_location            = azurerm_resource_group.this.location
+  monitor_data_collection_rule_name                = "microsoft-avdi-eastus"
+  monitor_data_collection_rule_resource_group_name = azurerm_resource_group.this.name
+  enable_telemetry                                 = var.enable_telemetry
   monitor_data_collection_rule_data_sources = {
     performance_counter = [
       {
@@ -236,6 +229,13 @@ module "dcr" {
       }
     ]
   }
+  monitor_data_collection_rule_destinations = {
+    log_analytics = {
+      name                  = azurerm_log_analytics_workspace.this.name
+      workspace_resource_id = azurerm_log_analytics_workspace.this.id
+    }
+  }
+  monitor_data_collection_rule_kind = "Windows"
 }
 
 # Creates an association between an Azure Monitor data collection rule and a virtual machine.
