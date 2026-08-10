@@ -19,6 +19,7 @@ resource "azurerm_monitor_data_collection_rule" "this" {
       transform_kql      = data_flow.value.transform_kql
     }
   }
+
   dynamic "destinations" {
     for_each = [var.monitor_data_collection_rule_destinations]
 
@@ -91,6 +92,7 @@ resource "azurerm_monitor_data_collection_rule" "this" {
       }
     }
   }
+
   dynamic "data_sources" {
     for_each = var.monitor_data_collection_rule_data_sources == null ? [] : [var.monitor_data_collection_rule_data_sources]
 
@@ -218,6 +220,7 @@ resource "azurerm_monitor_data_collection_rule" "this" {
       }
     }
   }
+
   dynamic "identity" {
     for_each = var.monitor_data_collection_rule_identity == null ? [] : [var.monitor_data_collection_rule_identity]
 
@@ -226,6 +229,7 @@ resource "azurerm_monitor_data_collection_rule" "this" {
       identity_ids = identity.value.identity_ids
     }
   }
+
   dynamic "stream_declaration" {
     for_each = var.monitor_data_collection_rule_stream_declaration == null ? [] : var.monitor_data_collection_rule_stream_declaration
 
@@ -242,6 +246,7 @@ resource "azurerm_monitor_data_collection_rule" "this" {
       }
     }
   }
+
   dynamic "timeouts" {
     for_each = var.monitor_data_collection_rule_timeouts == null ? [] : [var.monitor_data_collection_rule_timeouts]
 
@@ -253,4 +258,3 @@ resource "azurerm_monitor_data_collection_rule" "this" {
     }
   }
 }
-
