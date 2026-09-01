@@ -13,9 +13,7 @@ terraform {
   }
 }
 
-provider "azapi" {
-  subscription_id = var.subscription_id
-}
+provider "azapi" {}
 
 data "azapi_client_config" "this" {}
 
