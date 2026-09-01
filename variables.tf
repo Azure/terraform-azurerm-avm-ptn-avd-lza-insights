@@ -413,8 +413,9 @@ variable "kind" {
 # tflint-ignore: terraform_unused_declarations
 variable "lock" {
   type = object({
-    kind = string
-    name = optional(string, null)
+    kind  = string
+    name  = optional(string, null)
+    notes = optional(string, null)
   })
   default     = null
   description = <<DESCRIPTION
@@ -422,6 +423,7 @@ Controls the Resource Lock configuration for this resource. The following proper
 
 - `kind` - (Required) The type of lock. Possible values are `\"CanNotDelete\"` and `\"ReadOnly\"`.
 - `name` - (Optional) The name of the lock. If not specified, a name will be generated based on the `kind` value. Changing this forces the creation of a new resource.
+- `notes` - (Optional) A note about the reason for the lock.
 DESCRIPTION
 
   validation {
@@ -490,6 +492,7 @@ variable "role_assignments" {
   type = map(object({
     role_definition_id_or_name             = string
     principal_id                           = string
+    name                                   = optional(string, null)
     description                            = optional(string, null)
     skip_service_principal_aad_check       = optional(bool, false)
     condition                              = optional(string, null)

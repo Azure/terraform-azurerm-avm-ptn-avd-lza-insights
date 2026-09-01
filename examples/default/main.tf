@@ -20,7 +20,7 @@ data "azapi_client_config" "this" {}
 # This ensures we have unique CAF compliant names for our resources.
 module "naming" {
   source  = "Azure/naming/azurerm"
-  version = ">= 0.3.0"
+  version = "0.4.3"
 
   suffix = ["avd-monitoring"]
 }
@@ -136,6 +136,9 @@ resource "azapi_resource" "vm" {
   parent_id = azapi_resource.rg.id
   type      = "Microsoft.Compute/virtualMachines@2024-07-01"
   body = {
+    # Spread the session hosts across availability zones, as required by the
+    # Azure Proactive Resiliency Library.
+    zones = [tostring((count.index % 3) + 1)]
     properties = {
       hardwareProfile = {
         vmSize = "Standard_D4s_v4"
