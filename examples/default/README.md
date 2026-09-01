@@ -148,7 +148,7 @@ resource "azapi_resource" "vm" {
     zones = [tostring((count.index % 3) + 1)]
     properties = {
       hardwareProfile = {
-        vmSize = "Standard_D4s_v4"
+        vmSize = "Standard_D2s_v5"
       }
       networkProfile = {
         networkInterfaces = [
