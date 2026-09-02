@@ -137,12 +137,14 @@ resource "azapi_resource" "vm" {
   type      = "Microsoft.Compute/virtualMachines@2024-07-01"
   body = {
     # Place each session host in an availability zone, as required by the Azure
-    # Proactive Resiliency Library. Zone 2 in this region has no spare capacity
-    # for the test subscription, so the hosts alternate between zones 1 and 3.
+    # Proactive Resiliency Library. Zone 2 in this region has repeatedly had no
+    # spare capacity, so the hosts alternate between zones 1 and 3.
     zones = [tostring((count.index % 2) * 2 + 1)]
     properties = {
       hardwareProfile = {
-        vmSize = "Standard_D2s_v5"
+        # An AMD size draws on a different capacity pool than the equivalent
+        # Intel size, which the shared test subscriptions often exhaust.
+        vmSize = "Standard_D2as_v5"
       }
       networkProfile = {
         networkInterfaces = [
