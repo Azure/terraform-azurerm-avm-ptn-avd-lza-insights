@@ -13,10 +13,6 @@ terraform {
       source  = "Azure/azapi"
       version = "~> 2.12"
     }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.5"
-    }
   }
 }
 
@@ -40,52 +36,14 @@ resource "azapi_resource" "rg" {
   tags      = local.tags
 }
 
-resource "azapi_resource" "host_pool" {
-  location  = var.location
-  name      = "vdpool-entraid-001"
-  parent_id = azapi_resource.rg.id
-  type      = "Microsoft.DesktopVirtualization/hostPools@2024-04-03"
-  body = {
-    properties = {
-      hostPoolType          = "Pooled"
-      loadBalancerType      = "BreadthFirst"
-      preferredAppGroupType = "Desktop"
-    }
-  }
-  tags = local.tags
-}
-
+# The identity the data collection rule runs under. Passing it to the module
+# exercises the `managed_identities` input.
 resource "azapi_resource" "user_assigned_identity" {
   location  = var.location
   name      = "uai-avd-dcr"
   parent_id = azapi_resource.rg.id
   type      = "Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31"
   tags      = local.tags
-}
-
-# The subnet is declared inline so that Terraform makes a single write to the
-# virtual network, rather than racing separate subnet writes against each other.
-resource "azapi_resource" "vnet" {
-  location  = var.location
-  name      = module.naming.virtual_network.name_unique
-  parent_id = azapi_resource.rg.id
-  type      = "Microsoft.Network/virtualNetworks@2024-05-01"
-  body = {
-    properties = {
-      addressSpace = {
-        addressPrefixes = ["10.0.0.0/16"]
-      }
-      subnets = [
-        {
-          name = local.subnet_name
-          properties = {
-            addressPrefix = "10.0.1.0/24"
-          }
-        }
-      ]
-    }
-  }
-  tags = local.tags
 }
 
 resource "azapi_resource" "log_analytics_workspace" {
@@ -102,123 +60,6 @@ resource "azapi_resource" "log_analytics_workspace" {
     }
   }
   tags = local.tags
-}
-
-resource "azapi_resource" "nic" {
-  count = var.vm_count
-
-  location  = var.location
-  name      = "${var.avd_vm_name}-${count.index}-nic"
-  parent_id = azapi_resource.rg.id
-  type      = "Microsoft.Network/networkInterfaces@2024-05-01"
-  body = {
-    properties = {
-      ipConfigurations = [
-        {
-          name = "internal"
-          properties = {
-            privateIPAllocationMethod = "Dynamic"
-            subnet = {
-              id = "${azapi_resource.vnet.id}/subnets/${local.subnet_name}"
-            }
-          }
-        }
-      ]
-    }
-  }
-  tags = local.tags
-}
-
-# Generate VM local password
-resource "random_password" "vmpass" {
-  length  = 20
-  special = true
-}
-
-resource "azapi_resource" "vm" {
-  count = var.vm_count
-
-  location  = var.location
-  name      = "${var.avd_vm_name}-${count.index}"
-  parent_id = azapi_resource.rg.id
-  type      = "Microsoft.Compute/virtualMachines@2024-07-01"
-  body = {
-    # Place each session host in an availability zone, as required by the Azure
-    # Proactive Resiliency Library. Zone 2 in this region has repeatedly had no
-    # spare capacity, so the hosts alternate between zones 1 and 3.
-    zones = [tostring((count.index % 2) * 2 + 1)]
-    properties = {
-      hardwareProfile = {
-        # An AMD size draws on a different capacity pool than the equivalent
-        # Intel size, which the shared test subscriptions often exhaust.
-        vmSize = "Standard_D2as_v5"
-      }
-      networkProfile = {
-        networkInterfaces = [
-          {
-            id = azapi_resource.nic[count.index].id
-          }
-        ]
-      }
-      osProfile = {
-        adminUsername = "adminuser"
-        computerName  = "${var.avd_vm_name}-${count.index}"
-      }
-      securityProfile = {
-        encryptionAtHost = true
-      }
-      storageProfile = {
-        imageReference = {
-          offer     = "windows-11"
-          publisher = "microsoftwindowsdesktop"
-          sku       = "win11-23h2-avd"
-          version   = "latest"
-        }
-        osDisk = {
-          caching      = "ReadWrite"
-          createOption = "FromImage"
-          managedDisk = {
-            storageAccountType = "Premium_LRS"
-          }
-          name = "${var.avd_vm_name}-${count.index}-osdisk"
-        }
-      }
-    }
-  }
-  sensitive_body = {
-    properties = {
-      osProfile = {
-        adminPassword = random_password.vmpass.result
-      }
-    }
-  }
-  tags = local.tags
-
-  identity {
-    type         = "UserAssigned"
-    identity_ids = [azapi_resource.user_assigned_identity.id]
-  }
-}
-
-# Virtual Machine Extension for the Azure Monitor Agent, which is what actually
-# collects the data described by the Data Collection Rule.
-resource "azapi_resource" "ama" {
-  count = var.vm_count
-
-  name      = "AzureMonitorWindowsAgent"
-  parent_id = azapi_resource.vm[count.index].id
-  type      = "Microsoft.Compute/virtualMachines/extensions@2024-07-01"
-  body = {
-    properties = {
-      autoUpgradeMinorVersion = true
-      enableAutomaticUpgrade  = true
-      publisher               = "Microsoft.Azure.Monitor"
-      type                    = "AzureMonitorWindowsAgent"
-      typeHandlerVersion      = "1.22"
-    }
-  }
-  location = var.location
-  tags     = local.tags
 }
 
 # This is the module that creates the data collection rule
@@ -267,23 +108,10 @@ module "dcr" {
   }
   enable_telemetry = var.enable_telemetry
   kind             = "Windows"
-  tags             = local.tags
-}
-
-# Creates an association between an Azure Monitor data collection rule and a virtual machine.
-resource "azapi_resource" "dcr_association" {
-  count = var.vm_count
-
-  name      = "${var.avd_vm_name}-association-${count.index}"
-  parent_id = azapi_resource.vm[count.index].id
-  type      = "Microsoft.Insights/dataCollectionRuleAssociations@2023-03-11"
-  body = {
-    properties = {
-      dataCollectionRuleId = module.dcr.resource_id
-    }
+  managed_identities = {
+    user_assigned_resource_ids = [azapi_resource.user_assigned_identity.id]
   }
-
-  depends_on = [azapi_resource.ama]
+  tags = local.tags
 }
 ```
 
@@ -296,22 +124,13 @@ The following requirements are needed by this module:
 
 - <a name="requirement_azapi"></a> [azapi](#requirement\_azapi) (~> 2.12)
 
-- <a name="requirement_random"></a> [random](#requirement\_random) (~> 3.5)
-
 ## Resources
 
 The following resources are used by this module:
 
-- [azapi_resource.ama](https://registry.terraform.io/providers/Azure/azapi/latest/docs/resources/resource) (resource)
-- [azapi_resource.dcr_association](https://registry.terraform.io/providers/Azure/azapi/latest/docs/resources/resource) (resource)
-- [azapi_resource.host_pool](https://registry.terraform.io/providers/Azure/azapi/latest/docs/resources/resource) (resource)
 - [azapi_resource.log_analytics_workspace](https://registry.terraform.io/providers/Azure/azapi/latest/docs/resources/resource) (resource)
-- [azapi_resource.nic](https://registry.terraform.io/providers/Azure/azapi/latest/docs/resources/resource) (resource)
 - [azapi_resource.rg](https://registry.terraform.io/providers/Azure/azapi/latest/docs/resources/resource) (resource)
 - [azapi_resource.user_assigned_identity](https://registry.terraform.io/providers/Azure/azapi/latest/docs/resources/resource) (resource)
-- [azapi_resource.vm](https://registry.terraform.io/providers/Azure/azapi/latest/docs/resources/resource) (resource)
-- [azapi_resource.vnet](https://registry.terraform.io/providers/Azure/azapi/latest/docs/resources/resource) (resource)
-- [random_password.vmpass](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) (resource)
 - [azapi_client_config.this](https://registry.terraform.io/providers/Azure/azapi/latest/docs/data-sources/client_config) (data source)
 
 <!-- markdownlint-disable MD013 -->
@@ -322,14 +141,6 @@ No required inputs.
 ## Optional Inputs
 
 The following input variables are optional (have default values):
-
-### <a name="input_avd_vm_name"></a> [avd\_vm\_name](#input\_avd\_vm\_name)
-
-Description: Base name for the Azure Virtual Desktop VMs
-
-Type: `string`
-
-Default: `"vm-avdaad"`
 
 ### <a name="input_enable_telemetry"></a> [enable\_telemetry](#input\_enable\_telemetry)
 
@@ -356,14 +167,6 @@ Description: The name of the Log Analytics workspace for Azure Virtual Desktop.
 Type: `string`
 
 Default: `"avd-log-analytics-workspace"`
-
-### <a name="input_vm_count"></a> [vm\_count](#input\_vm\_count)
-
-Description: Number of virtual machines to create
-
-Type: `number`
-
-Default: `1`
 
 ## Outputs
 
