@@ -28,6 +28,6 @@ variable "log_analytics_workspace_name" {
 
 variable "vm_count" {
   type        = number
-  default     = 2
+  default     = 1
   description = "Number of virtual machines to create"
 }

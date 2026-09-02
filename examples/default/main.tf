@@ -136,9 +136,10 @@ resource "azapi_resource" "vm" {
   parent_id = azapi_resource.rg.id
   type      = "Microsoft.Compute/virtualMachines@2024-07-01"
   body = {
-    # Spread the session hosts across availability zones, as required by the
-    # Azure Proactive Resiliency Library.
-    zones = [tostring((count.index % 3) + 1)]
+    # Place each session host in an availability zone, as required by the Azure
+    # Proactive Resiliency Library. Zone 2 in this region has no spare capacity
+    # for the test subscription, so the hosts alternate between zones 1 and 3.
+    zones = [tostring((count.index % 2) * 2 + 1)]
     properties = {
       hardwareProfile = {
         vmSize = "Standard_D2s_v5"
