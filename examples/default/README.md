@@ -25,7 +25,6 @@ provider "azurerm" {
   subscription_id = var.subscription_id
 }
 
-
 # This ensures we have unique CAF compliant names for our resources.
 module "naming" {
   source  = "Azure/naming/azurerm"
@@ -69,10 +68,10 @@ resource "azurerm_virtual_network" "this_vnet" {
 }
 
 resource "azurerm_subnet" "this_subnet_1" {
-  address_prefixes     = ["10.0.1.0/24"]
   name                 = "${module.naming.subnet.name_unique}-1"
   resource_group_name  = azurerm_resource_group.this.name
   virtual_network_name = azurerm_virtual_network.this_vnet.name
+  address_prefixes     = ["10.0.1.0/24"]
 }
 
 resource "azurerm_log_analytics_workspace" "this" {
@@ -104,13 +103,13 @@ resource "random_password" "vmpass" {
 resource "azurerm_windows_virtual_machine" "this" {
   count = var.vm_count
 
-  admin_password             = random_password.vmpass.result
-  admin_username             = "adminuser"
   location                   = azurerm_resource_group.this.location
   name                       = "${var.avd_vm_name}-${count.index}"
   network_interface_ids      = [azurerm_network_interface.this[count.index].id]
   resource_group_name        = azurerm_resource_group.this.name
   size                       = "Standard_D4s_v4"
+  admin_password             = random_password.vmpass.result
+  admin_username             = "adminuser"
   computer_name              = "${var.avd_vm_name}-${count.index}"
   encryption_at_host_enabled = true
 
@@ -119,10 +118,12 @@ resource "azurerm_windows_virtual_machine" "this" {
     storage_account_type = "Premium_LRS"
     name                 = "${var.avd_vm_name}-${count.index}-osdisk"
   }
+
   identity {
     type         = "UserAssigned"
     identity_ids = [azurerm_user_assigned_identity.this.id]
   }
+
   source_image_reference {
     offer     = "windows-11"
     publisher = "microsoftwindowsdesktop"
