@@ -15,17 +15,13 @@ resource "azapi_resource" "this" {
       streamDeclarations       = local.stream_declarations
     }
   }
-  create_headers      = var.enable_telemetry ? { "User-Agent" : local.avm_azapi_header } : null
-  delete_headers      = var.enable_telemetry ? { "User-Agent" : local.avm_azapi_header } : null
   ignore_body_changes = length(var.ignore_body_changes.insights_data_collection_rules) > 0 ? var.ignore_body_changes.insights_data_collection_rules : null
   # Unset optional inputs are `null` in `body`. Without this the provider would
   # send them to Azure as explicit JSON nulls.
   ignore_null_property   = true
-  read_headers           = var.enable_telemetry ? { "User-Agent" : local.avm_azapi_header } : null
   response_export_values = ["properties.endpoints", "properties.immutableId"]
   retry                  = var.retry
   tags                   = var.tags
-  update_headers         = var.enable_telemetry ? { "User-Agent" : local.avm_azapi_header } : null
 
   dynamic "identity" {
     for_each = local.identity_type == null ? [] : [local.identity_type]
