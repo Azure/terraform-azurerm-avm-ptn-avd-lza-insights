@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Azure/azure-verified-modules-tools/main/src/Avm.Authoring/Resources/Schemas/v1/avm-module-metadata.schema.json",
+  "moduleDisplayName": "AVD Insights",
+  "moduleDescription": "AVM Pattern Module for AVD Insights",
+  "canonicalType": "avd-lza/insights",
+  "owners": [
+    "jensheerin",
+    "sihbher"
+  ],
+  "telemetryIdPrefix": "46d3xtrf.ptn.cd4a0b1"
+}
