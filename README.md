@@ -10,7 +10,132 @@ Azure Verified Module to deploy Azure Virtual Desktop Insights
 Features
 Data Collection Rules for Azure Virtual Desktop Insights
 
-*This module has been tested and validated to work with version 4.0.0 of the azurerm provider and is backward compatible.*
+## Upgrading to v0.3.0
+
+v0.3.0 replaces the AzureRM provider with the AzAPI provider, as required by the AVM specification. The module no longer declares `hashicorp/azurerm` at all, so it is no longer tied to a single AzureRM major version. This resolves the request in [#126](https://github.com/Azure/terraform-azurerm-avm-ptn-avd-lza-insights/issues/126).
+
+This is a breaking change to the input and output surface. The module ships a `moved` block to transfer the existing `azurerm_monitor_data_collection_rule.this` state entry to AzAPI. Keep the same module address and equivalent resource settings when upgrading. The state move does not prevent replacement if you also change settings that require a new rule.
+
+### Before you upgrade
+
+- Back up the existing Terraform state before upgrading.
+- Run `terraform init -upgrade`, then `terraform plan` normally. Do **not** pass `-refresh=false` on the first plan after upgrading. The state move copies only the resource ID, name, parent ID, and type. Everything else is backfilled by the refresh that follows.
+- Set `parent_id` to the resource group ID exactly as it is spelled inside the rule's own resource ID. AzAPI derives `parent_id` by truncating the resource ID as a plain string, with no case normalisation, and `parent_id` forces replacement. A differently cased ID plans a destroy and recreate.
+- Keep `name`, `location`, and `kind` unchanged during migration. Changing `kind` requires replacement, including setting it on a rule that previously omitted it.
+- Confirm the plan proposes **no deletion or replacement of the rule** before applying. Output and state-address changes are expected. Review any in-place changes to the rule's settings before proceeding. If an equivalent configuration proposes replacement, stop and open an issue.
+- After applying the migration, run another plan and confirm there are no remaining resource changes.
+
+### Renamed inputs
+
+| Before v0.3.0 | v0.3.0 |
+| --- | --- |
+| `monitor_data_collection_rule_name` | `name` |
+| `monitor_data_collection_rule_location` | `location` |
+| `monitor_data_collection_rule_resource_group_name` (group **name**) | `parent_id` (group **resource ID**) |
+| `monitor_data_collection_rule_data_flow` | `data_flows` |
+| `monitor_data_collection_rule_data_sources` | `data_sources` |
+| `monitor_data_collection_rule_destinations` | `destinations` |
+| `monitor_data_collection_rule_description` | `description` |
+| `monitor_data_collection_rule_kind` | `kind` |
+| `monitor_data_collection_rule_data_collection_endpoint_id` | `data_collection_endpoint_id` |
+| `monitor_data_collection_rule_stream_declaration` | `stream_declarations` |
+| `monitor_data_collection_rule_identity` | `managed_identities` |
+| `monitor_data_collection_rule_tags` | `tags` |
+| `monitor_data_collection_rule_timeouts` | `timeouts` |
+| `monitor_data_collection_rule_association_*` | removed — these four inputs were declared but never used |
+
+`managed_identities` already existed in v0.2.0 with the same shape, but nothing consumed it. It is now the identity input, and setting it takes effect.
+
+### Reshaped inputs
+
+The nested attributes now follow the shape of the Azure Resource Manager schema, so what you write maps one to one onto what Azure stores.
+
+Data sources are pluralised: `performance_counter` becomes `performance_counters`, `windows_event_log` becomes `windows_event_logs`, `iis_log` becomes `iis_logs`, `log_file` becomes `log_files`, `extension` becomes `extensions`, `data_import` becomes `data_imports`, and `windows_firewall_log` becomes `windows_firewall_logs`. `syslog`, `platform_telemetry`, and `prometheus_forwarder` keep their names.
+
+The `event_hub`, `event_hub_direct`, and `log_analytics` destinations change from single objects to lists. The other renamed destinations were already lists. `azure_monitor_metrics` stays a single object. `azure_data_explorer` and `microsoft_fabric` are new.
+
+The following paths are relative to the old and new destination inputs:
+
+| Before v0.3.0 | v0.3.0 |
+| --- | --- |
+| `event_hub.event_hub_id` | `event_hubs[*].event_hub_resource_id` |
+| `event_hub_direct.event_hub_id` | `event_hubs_direct[*].event_hub_resource_id` |
+| `log_analytics.workspace_resource_id` | `log_analytics[*].workspace_resource_id` |
+| `monitor_account[*].monitor_account_id` | `monitoring_accounts[*].account_resource_id` |
+| `storage_blob[*].storage_account_id` | `storage_accounts[*].storage_account_resource_id` |
+| `storage_blob_direct[*].storage_account_id` | `storage_blobs_direct[*].storage_account_resource_id` |
+| `storage_table_direct[*].storage_account_id` | `storage_tables_direct[*].storage_account_resource_id` |
+
+Keep each destination's `name`, `container_name`, and `table_name` where applicable. Keep the matching names in `data_flows[*].destinations` unchanged. Each configured destination above requires a valid resource ID. Missing IDs and IDs of the wrong resource type now fail input validation. Supplying an ID only under its legacy attribute name also fails validation.
+
+For example, inside the caller's module block:
+
+```hcl
+# Before v0.3.0
+monitor_data_collection_rule_destinations = {
+  event_hub = {
+    name         = "events"
+    event_hub_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.EventHub/namespaces/logs/eventhubs/events"
+  }
+}
+```
+
+```hcl
+# v0.3.0
+destinations = {
+  event_hubs = [{
+    name                  = "events"
+    event_hub_resource_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/monitoring/providers/Microsoft.EventHub/namespaces/logs/eventhubs/events"
+  }]
+}
+```
+
+Additional nested changes:
+
+- `data_sources.data_import.event_hub_data_source` was a list. Use the single object `data_sources.data_imports.event_hub` instead. Keep `consumer_group`, `name`, and `stream` on that object.
+- `stream_declarations` is now a map keyed by stream name. Replace the old `column` attribute with `columns`. The old `stream_name` value becomes the map key.
+- `label_include_filter` on `prometheus_forwarder` is now `map(string)`, matching the ARM dictionary. It was a list of `{ label, value }` objects.
+- `extension_json` on `extensions` is now `extension_settings`. It is still a JSON string, so pass the same `jsonencode(...)` value you passed before.
+
+For example, a custom stream changes as follows:
+
+```hcl
+# Before v0.3.0
+monitor_data_collection_rule_stream_declaration = [{
+  stream_name = "Custom-Events"
+  column      = [{ name = "TimeGenerated", type = "datetime" }]
+}]
+```
+
+```hcl
+# v0.3.0
+stream_declarations = {
+  "Custom-Events" = {
+    columns = [{ name = "TimeGenerated", type = "datetime" }]
+  }
+}
+```
+
+The managed identity input also changes shape:
+
+| Before v0.3.0: `monitor_data_collection_rule_identity` | v0.3.0: `managed_identities` |
+| --- | --- |
+| `type = "SystemAssigned"` | `system_assigned = true` |
+| `type = "UserAssigned"` with `identity_ids = [...]` | `user_assigned_resource_ids = [...]` |
+| `null` | `{}` or omit the input |
+
+Preserve the existing identity selection and IDs during migration. Enabling or changing an identity is a separate configuration change.
+
+Every data source that supports it also gains `transform_kql`, data flows gain `capture_overflow`, and `windows_firewall_logs` gains `profile_filter`.
+
+### Changed outputs
+
+| Before v0.3.0 | v0.3.0 |
+| --- | --- |
+| `resource` (the whole provider object) | removed — see [TFFR2](https://azure.github.io/Azure-Verified-Modules/specs/terraform/#id-tffr2---category-outputs---additional-terraform-outputs) |
+| `resource_id` (returned the whole object, not an ID) | `resource_id` — now returns the resource ID string |
+
+If you consumed `module.<name>.resource.id`, use `module.<name>.resource_id`. The module also now exposes `name`, `rule_immutable_id`, `logs_ingestion_endpoint`, `metrics_ingestion_endpoint`, and `system_assigned_mi_principal_id`.
 
 <!-- markdownlint-disable MD033 -->
 ## Requirements
@@ -21,8 +146,6 @@ The following requirements are needed by this module:
 
 - <a name="requirement_azapi"></a> [azapi](#requirement\_azapi) (~> 2.12)
 
-- <a name="requirement_azurerm"></a> [azurerm](#requirement\_azurerm) (>= 3.71.0, < 5.0.0)
-
 - <a name="requirement_modtm"></a> [modtm](#requirement\_modtm) (~> 0.3)
 
 - <a name="requirement_random"></a> [random](#requirement\_random) (>= 3.6.0, <4.0.0)
@@ -31,7 +154,7 @@ The following requirements are needed by this module:
 
 The following resources are used by this module:
 
-- [azurerm_monitor_data_collection_rule.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/monitor_data_collection_rule) (resource)
+- [azapi_resource.this](https://registry.terraform.io/providers/Azure/azapi/latest/docs/resources/resource) (resource)
 - [modtm_telemetry.telemetry](https://registry.terraform.io/providers/azure/modtm/latest/docs/resources/telemetry) (resource)
 - [random_uuid.telemetry](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/uuid) (resource)
 - [azapi_client_config.telemetry](https://registry.terraform.io/providers/Azure/azapi/latest/docs/data-sources/client_config) (data source)
@@ -42,19 +165,23 @@ The following resources are used by this module:
 
 The following input variables are required:
 
-### <a name="input_monitor_data_collection_rule_data_flow"></a> [monitor\_data\_collection\_rule\_data\_flow](#input\_monitor\_data\_collection\_rule\_data\_flow)
+### <a name="input_data_flows"></a> [data\_flows](#input\_data\_flows)
 
-Description: - `built_in_transform` - (Optional) The built-in transform to transform stream data.
-- `destinations` - (Required) Specifies a list of destination names. A `azure_monitor_metrics` data source only allows for stream of kind `Microsoft-InsightsMetrics`.
-- `output_stream` - (Optional) The output stream of the transform. Only required if the data flow changes data to a different stream.
-- `streams` - (Required) Specifies a list of streams. Possible values include but not limited to `Microsoft-Event`, `Microsoft-InsightsMetrics`, `Microsoft-Perf`, `Microsoft-Syslog`, `Microsoft-WindowsEvent`, and `Microsoft-PrometheusMetrics`.
-- `transform_kql` - (Optional) The KQL query to transform stream data.
+Description: The data flows of the Data Collection Rule. Maps to `properties.dataFlows` in the ARM schema.
+
+- `built_in_transform` - (Optional) The built-in transform to transform stream data.
+- `capture_overflow` - (Optional) Whether overflowing data should be captured. Requires a `Microsoft-Overflow` destination.
+- `destinations` - (Required) A list of destination names. Each name must match a `name` declared in `var.destinations`.
+- `output_stream` - (Optional) The output stream of the transform. Only required when the data flow changes data to a different stream.
+- `streams` - (Required) A list of streams. Possible values include but are not limited to `Microsoft-Event`, `Microsoft-InsightsMetrics`, `Microsoft-Perf`, `Microsoft-Syslog`, `Microsoft-WindowsEvent`, and `Microsoft-PrometheusMetrics`.
+- `transform_kql` - (Optional) The KQL query used to transform stream data.
 
 Type:
 
 ```hcl
 list(object({
     built_in_transform = optional(string)
+    capture_overflow   = optional(bool)
     destinations       = list(string)
     output_stream      = optional(string)
     streams            = list(string)
@@ -62,21 +189,23 @@ list(object({
   }))
 ```
 
-### <a name="input_monitor_data_collection_rule_location"></a> [monitor\_data\_collection\_rule\_location](#input\_monitor\_data\_collection\_rule\_location)
+### <a name="input_location"></a> [location](#input\_location)
 
-Description: (Optional) The Azure Region where the Data Collection Rule should exist. Changing this forces a new Data Collection Rule to be created.
-
-Type: `string`
-
-### <a name="input_monitor_data_collection_rule_name"></a> [monitor\_data\_collection\_rule\_name](#input\_monitor\_data\_collection\_rule\_name)
-
-Description: (Required) The name which should be used for this Data Collection Rule. Changing this forces a new Data Collection Rule to be created.
+Description: The Azure region where the Data Collection Rule will be deployed. Changing this forces a new resource to be created.
 
 Type: `string`
 
-### <a name="input_monitor_data_collection_rule_resource_group_name"></a> [monitor\_data\_collection\_rule\_resource\_group\_name](#input\_monitor\_data\_collection\_rule\_resource\_group\_name)
+### <a name="input_name"></a> [name](#input\_name)
 
-Description: The name of the Resource Group where the Data Collection Rule should exist. Changing this forces a new Data Collection Rule to be created.
+Description: The name of the Data Collection Rule. Changing this forces a new resource to be created.
+
+Type: `string`
+
+### <a name="input_parent_id"></a> [parent\_id](#input\_parent\_id)
+
+Description: The fully-qualified ARM resource ID of the existing resource group into which the Data Collection Rule will be deployed, for example `/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-avd-monitoring`.
+
+This replaces the `monitor_data_collection_rule_resource_group_name` input used before v0.3.0. When migrating an existing deployment, supply the resource group ID exactly as it is spelled inside the rule's own resource ID, because `parent_id` forces replacement and is compared as a case-sensitive string.
 
 Type: `string`
 
@@ -84,9 +213,293 @@ Type: `string`
 
 The following input variables are optional (have default values):
 
+### <a name="input_data_collection_endpoint_id"></a> [data\_collection\_endpoint\_id](#input\_data\_collection\_endpoint\_id)
+
+Description: (Optional) The resource ID of the Data Collection Endpoint that this rule can be used with. Maps to `properties.dataCollectionEndpointId`.
+
+Type: `string`
+
+Default: `null`
+
+### <a name="input_data_sources"></a> [data\_sources](#input\_data\_sources)
+
+Description: The data sources of the Data Collection Rule. Maps to `properties.dataSources` in the ARM schema. Every data source `name` must be unique across all data source types within the rule.
+
+---
+`data_imports` supports the following:
+- `event_hub` - (Required) The Event Hub to import data from. Maps to `dataSources.dataImports.eventHub`, which the ARM schema models as a single object rather than a list.
+  - `consumer_group` - (Optional) The Event Hub consumer group name.
+  - `name` - (Required) The name of this data source.
+  - `stream` - (Required) The stream to collect from the Event Hub. The value should be a custom stream name.
+
+---
+`extensions` supports the following:
+- `extension_name` - (Required) The name of the VM extension.
+- `extension_settings` - (Optional) A JSON-encoded string holding the extension settings, for example `jsonencode({ workspaceId = "..." })`. It is decoded before being sent to Azure, so it arrives as a JSON object rather than a string.
+- `input_data_sources` - (Optional) A list of data sources this extension needs data from. Each item must name a supported data source that produces exactly one stream. Supported types are `performance_counters`, `windows_event_logs`, and `syslog`.
+- `name` - (Required) The name of this data source.
+- `streams` - (Required) A list of streams that this data source will be sent to.
+
+---
+`iis_logs` supports the following:
+- `log_directories` - (Optional) A list of absolute paths where the log files are located.
+- `name` - (Required) The name of this data source.
+- `streams` - (Required) A list of streams that this data source will be sent to. The supported value is `Microsoft-W3CIISLog`.
+- `transform_kql` - (Optional) The KQL query used to transform this data source.
+
+---
+`log_files` supports the following:
+- `file_patterns` - (Required) A list of file patterns where the log files are located, for example `C:\\JavaLogs\\*.log`.
+- `format` - (Required) The data format of the log files. Possible values are `json` and `text`.
+- `name` - (Required) The name of this data source.
+- `settings` - (Optional) Additional settings for the log file.
+  - `text.record_start_timestamp_format` - (Required) The timestamp format used to detect the start of a record.
+- `streams` - (Required) A list of streams that this data source will be sent to. The values should be custom stream names.
+- `transform_kql` - (Optional) The KQL query used to transform this data source.
+
+---
+`performance_counters` supports the following:
+- `counter_specifiers` - (Required) A list of specifier names of the performance counters to collect. To list the performance counters available on Windows, run `typeperf`.
+- `name` - (Required) The name of this data source.
+- `sampling_frequency_in_seconds` - (Required) The number of seconds between consecutive samples. The value must be an integer between `1` and `300` inclusive. It must be `60` for counters collected with the `Microsoft-InsightsMetrics` stream.
+- `streams` - (Required) A list of streams that this data source will be sent to. Possible values include but are not limited to `Microsoft-InsightsMetrics` and `Microsoft-Perf`.
+- `transform_kql` - (Optional) The KQL query used to transform this data source.
+
+---
+`platform_telemetry` supports the following:
+- `name` - (Required) The name of this data source.
+- `streams` - (Required) A list of streams that this data source will be sent to, for example `Microsoft.Cache/redis:Metrics-Group-All`.
+
+---
+`prometheus_forwarder` supports the following:
+- `label_include_filter` - (Optional) A map of label inclusion filters, where the map key is the label name and the map value is the label value. Only `microsoft_metrics_include_label` is currently supported, and values are matched case-insensitively. The ARM schema models this as a dictionary, so it is a map here rather than the list of label/value pairs used before v0.3.0.
+- `name` - (Required) The name of this data source.
+- `streams` - (Required) A list of streams that this data source will be sent to. The supported value is `Microsoft-PrometheusMetrics`.
+
+---
+`syslog` supports the following:
+- `facility_names` - (Required) A list of facility names. Use `*` to collect logs for all facility names. Possible values are `auth`, `authpriv`, `cron`, `daemon`, `kern`, `lpr`, `mail`, `mark`, `news`, `syslog`, `user`, `uucp`, `local0` through `local7`, and `*`.
+- `log_levels` - (Required) A list of log levels. Use `*` to collect logs for all log levels. Possible values are `Debug`, `Info`, `Notice`, `Warning`, `Error`, `Critical`, `Alert`, `Emergency`, and `*`.
+- `name` - (Required) The name of this data source.
+- `streams` - (Optional) A list of streams that this data source will be sent to. Possible values include but are not limited to `Microsoft-Syslog`, `Microsoft-CiscoAsa`, and `Microsoft-CommonSecurityLog`.
+- `transform_kql` - (Optional) The KQL query used to transform this data source.
+
+---
+`windows_event_logs` supports the following:
+- `name` - (Required) The name of this data source.
+- `streams` - (Required) A list of streams that this data source will be sent to. Possible values include but are not limited to `Microsoft-Event`, `Microsoft-WindowsEvent`, `Microsoft-RomeDetectionEvent`, and `Microsoft-SecurityEvent`.
+- `transform_kql` - (Optional) The KQL query used to transform this data source.
+- `x_path_queries` - (Required) A list of Windows Event Log queries in XPath expression.
+
+---
+`windows_firewall_logs` supports the following:
+- `name` - (Required) The name of this data source.
+- `profile_filter` - (Optional) A list of firewall profiles to collect logs for.
+- `streams` - (Required) A list of streams that this data source will be sent to.
+
+Type:
+
+```hcl
+object({
+    data_imports = optional(object({
+      event_hub = object({
+        consumer_group = optional(string)
+        name           = string
+        stream         = string
+      })
+    }))
+    extensions = optional(list(object({
+      extension_name     = string
+      extension_settings = optional(string)
+      input_data_sources = optional(list(string))
+      name               = string
+      streams            = list(string)
+    })))
+    iis_logs = optional(list(object({
+      log_directories = optional(list(string))
+      name            = string
+      streams         = list(string)
+      transform_kql   = optional(string)
+    })))
+    log_files = optional(list(object({
+      file_patterns = list(string)
+      format        = string
+      name          = string
+      streams       = list(string)
+      transform_kql = optional(string)
+      settings = optional(object({
+        text = object({
+          record_start_timestamp_format = string
+        })
+      }))
+    })))
+    performance_counters = optional(list(object({
+      counter_specifiers            = list(string)
+      name                          = string
+      sampling_frequency_in_seconds = number
+      streams                       = list(string)
+      transform_kql                 = optional(string)
+    })))
+    platform_telemetry = optional(list(object({
+      name    = string
+      streams = list(string)
+    })))
+    prometheus_forwarder = optional(list(object({
+      label_include_filter = optional(map(string))
+      name                 = string
+      streams              = list(string)
+    })))
+    syslog = optional(list(object({
+      facility_names = list(string)
+      log_levels     = list(string)
+      name           = string
+      streams        = optional(list(string))
+      transform_kql  = optional(string)
+    })))
+    windows_event_logs = optional(list(object({
+      name           = string
+      streams        = list(string)
+      transform_kql  = optional(string)
+      x_path_queries = list(string)
+    })))
+    windows_firewall_logs = optional(list(object({
+      name           = string
+      profile_filter = optional(list(string))
+      streams        = list(string)
+    })))
+  })
+```
+
+Default: `null`
+
+### <a name="input_description"></a> [description](#input\_description)
+
+Description: (Optional) The description of the Data Collection Rule. Maps to `properties.description`.
+
+Type: `string`
+
+Default: `null`
+
+### <a name="input_destinations"></a> [destinations](#input\_destinations)
+
+Description: The destinations of the Data Collection Rule. Maps to `properties.destinations` in the ARM schema. Every destination `name` must be unique across all destination types within the rule, and each name referenced by `var.data_flows[*].destinations` must appear here.
+
+Before v0.3.0 the `event_hub`, `event_hub_direct`, and `log_analytics` destinations were single objects. The ARM schema models them as lists, so they are lists here. `storage_blob` is now `storage_accounts` and `monitor_account` is now `monitoring_accounts`, again matching ARM.
+
+---
+`azure_data_explorer` supports the following:
+- `database_name` - (Optional) The Azure Data Explorer database to ingest into.
+- `name` - (Required) The name of this destination.
+- `resource_id` - (Required) The resource ID of the Azure Data Explorer cluster. Azure supplies the read-only ingestion URI.
+
+---
+`azure_monitor_metrics` supports the following:
+- `name` - (Required) The name of this destination.
+
+---
+`event_hubs` supports the following:
+- `event_hub_resource_id` - (Required) The resource ID of the Event Hub. Replaces `event_hub_id`.
+- `name` - (Required) The name of this destination.
+
+---
+`event_hubs_direct` supports the following:
+- `event_hub_resource_id` - (Required) The resource ID of the Event Hub. Replaces `event_hub_id`.
+- `name` - (Required) The name of this destination.
+
+---
+`log_analytics` supports the following:
+- `name` - (Required) The name of this destination.
+- `workspace_resource_id` - (Required) The resource ID of the Log Analytics workspace.
+
+---
+`microsoft_fabric` supports the following:
+- `artifact_id` - (Optional) The artifact ID of the Microsoft Fabric eventhouse.
+- `database_name` - (Optional) The Microsoft Fabric database to ingest into.
+- `ingestion_uri` - (Optional) The ingestion URI of the eventhouse.
+- `name` - (Required) The name of this destination.
+- `tenant_id` - (Optional) The tenant ID of the Microsoft Fabric resource.
+
+---
+`monitoring_accounts` supports the following:
+- `account_resource_id` - (Required) The resource ID of the Monitor account. Replaces `monitor_account_id`.
+- `name` - (Required) The name of this destination.
+
+---
+`storage_accounts` supports the following:
+- `container_name` - (Optional) The storage container name.
+- `name` - (Required) The name of this destination.
+- `storage_account_resource_id` - (Required) The resource ID of the storage account. Replaces `storage_account_id`.
+
+---
+`storage_blobs_direct` supports the following:
+- `container_name` - (Optional) The storage container name.
+- `name` - (Required) The name of this destination.
+- `storage_account_resource_id` - (Required) The resource ID of the storage account. Replaces `storage_account_id`.
+
+---
+`storage_tables_direct` supports the following:
+- `name` - (Required) The name of this destination.
+- `storage_account_resource_id` - (Required) The resource ID of the storage account. Replaces `storage_account_id`.
+- `table_name` - (Optional) The storage table name.
+
+Type:
+
+```hcl
+object({
+    azure_data_explorer = optional(list(object({
+      database_name = optional(string)
+      name          = string
+      resource_id   = optional(string)
+    })))
+    azure_monitor_metrics = optional(object({
+      name = string
+    }))
+    event_hubs = optional(list(object({
+      event_hub_resource_id = optional(string)
+      name                  = string
+    })))
+    event_hubs_direct = optional(list(object({
+      event_hub_resource_id = optional(string)
+      name                  = string
+    })))
+    log_analytics = optional(list(object({
+      name                  = string
+      workspace_resource_id = optional(string)
+    })))
+    microsoft_fabric = optional(list(object({
+      artifact_id   = optional(string)
+      database_name = optional(string)
+      ingestion_uri = optional(string)
+      name          = string
+      tenant_id     = optional(string)
+    })))
+    monitoring_accounts = optional(list(object({
+      account_resource_id = optional(string)
+      name                = string
+    })))
+    storage_accounts = optional(list(object({
+      container_name              = optional(string)
+      name                        = string
+      storage_account_resource_id = optional(string)
+    })))
+    storage_blobs_direct = optional(list(object({
+      container_name              = optional(string)
+      name                        = string
+      storage_account_resource_id = optional(string)
+    })))
+    storage_tables_direct = optional(list(object({
+      name                        = string
+      storage_account_resource_id = optional(string)
+      table_name                  = optional(string)
+    })))
+  })
+```
+
+Default: `{}`
+
 ### <a name="input_diagnostic_settings"></a> [diagnostic\_settings](#input\_diagnostic\_settings)
 
-Description: A map of diagnostic settings to create on the Key Vault. The map key is deliberately arbitrary to avoid issues where map keys maybe unknown at plan time.
+Description: A map of diagnostic settings to create on the Data Collection Rule. The map key is deliberately arbitrary to avoid issues where map keys maybe unknown at plan time.
 
 - `name` - (Optional) The name of the diagnostic setting. One will be generated if not set, however this will not be unique if you want to create multiple diagnostic setting resources.
 - `log_categories` - (Optional) A set of log categories to send to the log analytics workspace. Defaults to `[]`.
@@ -128,19 +541,47 @@ Type: `bool`
 
 Default: `true`
 
-### <a name="input_lock"></a> [lock](#input\_lock)
+### <a name="input_ignore_body_changes"></a> [ignore\_body\_changes](#input\_ignore\_body\_changes)
 
-Description:   Controls the Resource Lock configuration for this resource. The following properties can be specified:
+Description: Body-relative paths to ignore for each AzAPI resource declared by this module. Paths use dot notation, for example `properties.description`.
 
-  - `kind` - (Required) The type of lock. Possible values are `\"CanNotDelete\"` and `\"ReadOnly\"`.
-  - `name` - (Optional) The name of the lock. If not specified, a name will be generated based on the `kind` value. Changing this forces the creation of a new resource.
+Changes to this variable take effect only after an apply, because the value is stored in provider-private state. Configuration at an ignored path is not sent to Azure until the path is removed from this list.
+
+- `insights_data_collection_rules` - Paths ignored on the Data Collection Rule.
 
 Type:
 
 ```hcl
 object({
-    kind = string
-    name = optional(string, null)
+    insights_data_collection_rules = optional(list(string), [])
+  })
+```
+
+Default: `{}`
+
+### <a name="input_kind"></a> [kind](#input\_kind)
+
+Description: (Optional) The kind of the Data Collection Rule. Possible values include `Linux`, `Windows`, `AgentDirectToStore`, and `WorkspaceTransforms`. A rule of kind `Linux` does not allow `windows_event_logs` data sources, and a rule of kind `Windows` does not allow `syslog` data sources. If not specified, all kinds of data sources are allowed. Changing this value forces a new resource, including setting it on a rule that previously omitted it.
+
+Type: `string`
+
+Default: `null`
+
+### <a name="input_lock"></a> [lock](#input\_lock)
+
+Description: Controls the Resource Lock configuration for this resource. The following properties can be specified:
+
+- `kind` - (Required) The type of lock. Possible values are `\"CanNotDelete\"` and `\"ReadOnly\"`.
+- `name` - (Optional) The name of the lock. If not specified, a name will be generated based on the `kind` value. Changing this forces the creation of a new resource.
+- `notes` - (Optional) A note about the reason for the lock.
+
+Type:
+
+```hcl
+object({
+    kind  = string
+    name  = optional(string, null)
+    notes = optional(string, null)
   })
 ```
 
@@ -148,10 +589,12 @@ Default: `null`
 
 ### <a name="input_managed_identities"></a> [managed\_identities](#input\_managed\_identities)
 
-Description:   Controls the Managed Identity configuration on this resource. The following properties can be specified:
+Description: Controls the Managed Identity configuration on this resource. The following properties can be specified:
 
-  - `system_assigned` - (Optional) Specifies if the System Assigned Managed Identity should be enabled.
-  - `user_assigned_resource_ids` - (Optional) Specifies a list of User Assigned Managed Identity resource IDs to be assigned to this resource.
+- `system_assigned` - (Optional) Specifies if the System Assigned Managed Identity should be enabled.
+- `user_assigned_resource_ids` - (Optional) Specifies a list of User Assigned Managed Identity resource IDs to be assigned to this resource.
+
+This replaces the `monitor_data_collection_rule_identity` input used before v0.3.0.
 
 Type:
 
@@ -164,364 +607,41 @@ object({
 
 Default: `{}`
 
-### <a name="input_monitor_data_collection_rule_association_data_collection_endpoint_id"></a> [monitor\_data\_collection\_rule\_association\_data\_collection\_endpoint\_id](#input\_monitor\_data\_collection\_rule\_association\_data\_collection\_endpoint\_id)
+### <a name="input_resource_types"></a> [resource\_types](#input\_resource\_types)
 
-Description: (Optional) The ID of the Data Collection Endpoint which will be associated to the target resource.
+Description: AzAPI resource types and API versions used by the module.
 
-Type: `string`
+- `insights_data_collection_rules` - Resource type and API version for the Data Collection Rule.
 
-Default: `null`
-
-### <a name="input_monitor_data_collection_rule_association_data_collection_rule_id"></a> [monitor\_data\_collection\_rule\_association\_data\_collection\_rule\_id](#input\_monitor\_data\_collection\_rule\_association\_data\_collection\_rule\_id)
-
-Description: (Optional) The ID of the Data Collection Rule which will be associated to the target resource.
-
-Type: `string`
-
-Default: `null`
-
-### <a name="input_monitor_data_collection_rule_association_description"></a> [monitor\_data\_collection\_rule\_association\_description](#input\_monitor\_data\_collection\_rule\_association\_description)
-
-Description: (Optional) The description of the Data Collection Rule Association.
-
-Type: `string`
-
-Default: `null`
-
-### <a name="input_monitor_data_collection_rule_association_name"></a> [monitor\_data\_collection\_rule\_association\_name](#input\_monitor\_data\_collection\_rule\_association\_name)
-
-Description: (Optional) The name which should be used for this Data Collection Rule Association. Changing this forces a new Data Collection Rule Association to be created. Defaults to `configurationAccessEndpoint`.
-
-Type: `string`
-
-Default: `null`
-
-### <a name="input_monitor_data_collection_rule_data_collection_endpoint_id"></a> [monitor\_data\_collection\_rule\_data\_collection\_endpoint\_id](#input\_monitor\_data\_collection\_rule\_data\_collection\_endpoint\_id)
-
-Description: (Optional) The resource ID of the Data Collection Endpoint that this rule can be used with.
-
-Type: `string`
-
-Default: `null`
-
-### <a name="input_monitor_data_collection_rule_data_sources"></a> [monitor\_data\_collection\_rule\_data\_sources](#input\_monitor\_data\_collection\_rule\_data\_sources)
-
-Description:
----
-`data_import` block supports the following:
-
----
-`event_hub_data_source` block supports the following:
-- `consumer_group` - (Optional) The Event Hub consumer group name.
-- `name` - (Required) The name which should be used for this data source. This name should be unique across all data sources regardless of type within the Data Collection Rule.
-- `stream` - (Required) The stream to collect from Event Hub. Possible value should be a custom stream name.
-
----
-`extension` block supports the following:
-- `extension_json` - (Optional) A JSON String which specifies the extension setting.
-- `extension_name` - (Required) The name of the VM extension.
-- `input_data_sources` - (Optional) Specifies a list of data sources this extension needs data from. An item should be a name of a supported data source which produces only one stream. Supported data sources type: `performance_counter`, `windows_event_log`,and `syslog`.
-- `name` - (Required) The name which should be used for this data source. This name should be unique across all data sources regardless of type within the Data Collection Rule.
-- `streams` - (Required) Specifies a list of streams that this data source will be sent to. A stream indicates what schema will be used for this data and usually what table in Log Analytics the data will be sent to. Possible values include but not limited to `Microsoft-Event`, `Microsoft-InsightsMetrics`, `Microsoft-Perf`, `Microsoft-Syslog`, `Microsoft-WindowsEvent`.
-
----
-`iis_log` block supports the following:
-- `log_directories` - (Optional) Specifies a list of absolute paths where the log files are located.
-- `name` - (Required) The name which should be used for this data source. This name should be unique across all data sources regardless of type within the Data Collection Rule.
-- `streams` - (Required) Specifies a list of streams that this data source will be sent to. A stream indicates what schema will be used for this data and usually what table in Log Analytics the data will be sent to. Possible value is `Microsoft-W3CIISLog`.
-
----
-`log_file` block supports the following:
-- `file_patterns` - (Required) Specifies a list of file patterns where the log files are located. For example, `C:\\JavaLogs\\*.log`.
-- `format` - (Required) The data format of the log files. possible value is `text`.
-- `name` - (Required) The name which should be used for this data source. This name should be unique across all data sources regardless of type within the Data Collection Rule.
-- `streams` - (Required) Specifies a list of streams that this data source will be sent to. A stream indicates what schema will be used for this data and usually what table in Log Analytics the data will be sent to. Possible value should be custom stream names.
-
----
-`settings` block supports the following:
-
----
-`text` block supports the following:
-- `record_start_timestamp_format` -
-
----
-`performance_counter` block supports the following:
-- `counter_specifiers` - (Required) Specifies a list of specifier names of the performance counters you want to collect. To get a list of performance counters on Windows, run the command `typeperf`. Please see [this document](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/data-sources-performance-counters#configure-performance-counters) for more information.
-- `name` - (Required) The name which should be used for this data source. This name should be unique across all data sources regardless of type within the Data Collection Rule.
-- `sampling_frequency_in_seconds` - (Required) The number of seconds between consecutive counter measurements (samples). The value should be integer between `1` and `300` inclusive. `sampling_frequency_in_seconds` must be equal to `60` seconds for counters collected with `Microsoft-InsightsMetrics` stream.
-- `streams` - (Required) Specifies a list of streams that this data source will be sent to. A stream indicates what schema will be used for this data and usually what table in Log Analytics the data will be sent to. Possible values include but not limited to `Microsoft-InsightsMetrics`,and `Microsoft-Perf`.
-
----
-`platform_telemetry` block supports the following:
-- `name` - (Required) The name which should be used for this data source. This name should be unique across all data sources regardless of type within the Data Collection Rule.
-- `streams` - (Required) Specifies a list of streams that this data source will be sent to. A stream indicates what schema will be used for this data and usually what table in Log Analytics the data will be sent to. Possible values include but not limited to `Microsoft.Cache/redis:Metrics-Group-All`.
-
----
-`prometheus_forwarder` block supports the following:
-- `name` - (Required) The name which should be used for this data source. This name should be unique across all data sources regardless of type within the Data Collection Rule.
-- `streams` - (Required) Specifies a list of streams that this data source will be sent to. A stream indicates what schema will be used for this data and usually what table in Log Analytics the data will be sent to. Possible value is `Microsoft-PrometheusMetrics`.
-
----
-`label_include_filter` block supports the following:
-- `label` - (Required) The label of the filter. This label should be unique across all `label_include_fileter` block. Possible value is `microsoft_metrics_include_label`.
-- `value` - (Required) The value of the filter.
-
----
-`syslog` block supports the following:
-- `facility_names` - (Required) Specifies a list of facility names. Use a wildcard `*` to collect logs for all facility names. Possible values are `auth`, `authpriv`, `cron`, `daemon`, `kern`, `lpr`, `mail`, `mark`, `news`, `syslog`, `user`, `uucp`, `local0`, `local1`, `local2`, `local3`, `local4`, `local5`, `local6`, `local7`,and `*`.
-- `log_levels` - (Required) Specifies a list of log levels. Use a wildcard `*` to collect logs for all log levels. Possible values are `Debug`, `Info`, `Notice`, `Warning`, `Error`, `Critical`, `Alert`, `Emergency`,and `*`.
-- `name` - (Required) The name which should be used for this data source. This name should be unique across all data sources regardless of type within the Data Collection Rule.
-- `streams` - (Optional) Specifies a list of streams that this data source will be sent to. A stream indicates what schema will be used for this data and usually what table in Log Analytics the data will be sent to. Possible values include but not limited to `Microsoft-Syslog`,and `Microsoft-CiscoAsa`, and `Microsoft-CommonSecurityLog`.
-
----
-`windows_event_log` block supports the following:
-- `name` - (Required) The name which should be used for this data source. This name should be unique across all data sources regardless of type within the Data Collection Rule.
-- `streams` - (Required) Specifies a list of streams that this data source will be sent to. A stream indicates what schema will be used for this data and usually what table in Log Analytics the data will be sent to. Possible values include but not limited to `Microsoft-Event`,and `Microsoft-WindowsEvent`, `Microsoft-RomeDetectionEvent`, and `Microsoft-SecurityEvent`.
-- `x_path_queries` - (Required) Specifies a list of Windows Event Log queries in XPath expression. Please see [this document](https://learn.microsoft.com/en-us/azure/azure-monitor/agents/data-collection-rule-azure-monitor-agent?tabs=cli#filter-events-using-xpath-queries) for more information.
-
----
-`windows_firewall_log` block supports the following:
-- `name` - (Required) The name which should be used for this data source. This name should be unique across all data sources regardless of type within the Data Collection Rule.
-- `streams` - (Required) Specifies a list of streams that this data source will be sent to. A stream indicates what schema will be used for this data and usually what table in Log Analytics the data will be sent to.
+The default matches the API version that the AzAPI provider selects when it moves state from `azurerm_monitor_data_collection_rule`, so a migrated deployment plans with no change to `type`.
 
 Type:
 
 ```hcl
 object({
-    data_import = optional(object({
-      event_hub_data_source = list(object({
-        consumer_group = optional(string)
-        name           = string
-        stream         = string
-      }))
-    }))
-    extension = optional(list(object({
-      extension_json     = optional(string)
-      extension_name     = string
-      input_data_sources = optional(list(string))
-      name               = string
-      streams            = list(string)
-    })))
-    iis_log = optional(list(object({
-      log_directories = optional(list(string))
-      name            = string
-      streams         = list(string)
-    })))
-    log_file = optional(list(object({
-      file_patterns = list(string)
-      format        = string
-      name          = string
-      streams       = list(string)
-      settings = optional(object({
-        text = object({
-          record_start_timestamp_format = string
-        })
-      }))
-    })))
-    performance_counter = optional(list(object({
-      counter_specifiers            = list(string)
-      name                          = string
-      sampling_frequency_in_seconds = number
-      streams                       = list(string)
-    })))
-    platform_telemetry = optional(list(object({
-      name    = string
-      streams = list(string)
-    })))
-    prometheus_forwarder = optional(list(object({
-      name    = string
-      streams = list(string)
-      label_include_filter = optional(set(object({
-        label = string
-        value = string
-      })))
-    })))
-    syslog = optional(list(object({
-      facility_names = list(string)
-      log_levels     = list(string)
-      name           = string
-      streams        = optional(list(string))
-    })))
-    windows_event_log = optional(list(object({
-      name           = string
-      streams        = list(string)
-      x_path_queries = list(string)
-    })))
-    windows_firewall_log = optional(list(object({
-      name    = string
-      streams = list(string)
-    })))
-  })
-```
-
-Default: `null`
-
-### <a name="input_monitor_data_collection_rule_description"></a> [monitor\_data\_collection\_rule\_description](#input\_monitor\_data\_collection\_rule\_description)
-
-Description: (Optional) The description of the Data Collection Rule.
-
-Type: `string`
-
-Default: `null`
-
-### <a name="input_monitor_data_collection_rule_destinations"></a> [monitor\_data\_collection\_rule\_destinations](#input\_monitor\_data\_collection\_rule\_destinations)
-
-Description:
----
-`azure_monitor_metrics` block supports the following:
-- `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
-
----
-`event_hub` block supports the following:
-- `event_hub_id` - (Optional) The resource ID of the Event Hub.
-- `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
-
----
-`event_hub_direct` block supports the following:
-- `event_hub_id` - (Optional) The resource ID of the Event Hub.
-- `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
-
----
-`log_analytics` block supports the following:
-- `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
-- `workspace_resource_id` - (Optional) The ID of a Log Analytic Workspace resource.
-
----
-`monitor_account` block supports the following:
-- `monitor_account_id` - (Optional) The resource ID of the Monitor Account.
-- `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
-
----
-`storage_blob` block supports the following:
-- `container_name` - (Optional) The Storage Container name.
-- `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
-- `storage_account_id` - (Optional) The resource ID of the Storage Account.
-
----
-`storage_blob_direct` block supports the following:
-- `container_name` - (Optional) The Storage Container name.
-- `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
-- `storage_account_id` - (Optional) The resource ID of the Storage Account.
-
----
-`storage_table_direct` block supports the following:
-- `name` - (Optional) The name which should be used for this destination. This name should be unique across all destinations regardless of type within the Data Collection Rule.
-- `storage_account_id` - (Optional) The resource ID of the Storage Account.
-- `table_name` - (Optional) The Storage Table name.
-
-Type:
-
-```hcl
-object({
-    azure_monitor_metrics = optional(object({
-      name = optional(string)
-    }))
-    event_hub = optional(object({
-      event_hub_id = optional(string)
-      name         = optional(string)
-    }))
-    event_hub_direct = optional(object({
-      event_hub_id = optional(string)
-      name         = optional(string)
-    }))
-    log_analytics = optional(object({
-      name                  = optional(string)
-      workspace_resource_id = optional(string)
-    }))
-    monitor_account = optional(list(object({
-      monitor_account_id = optional(string)
-      name               = optional(string)
-    })))
-    storage_blob = optional(list(object({
-      container_name     = optional(string)
-      name               = optional(string)
-      storage_account_id = optional(string)
-    })))
-    storage_blob_direct = optional(list(object({
-      container_name     = optional(string)
-      name               = optional(string)
-      storage_account_id = optional(string)
-    })))
-    storage_table_direct = optional(list(object({
-      name               = optional(string)
-      storage_account_id = optional(string)
-      table_name         = optional(string)
-    })))
+    insights_data_collection_rules = optional(string, "Microsoft.Insights/dataCollectionRules@2024-03-11")
   })
 ```
 
 Default: `{}`
 
-### <a name="input_monitor_data_collection_rule_identity"></a> [monitor\_data\_collection\_rule\_identity](#input\_monitor\_data\_collection\_rule\_identity)
+### <a name="input_retry"></a> [retry](#input\_retry)
 
-Description: - `identity_ids` - (Optional) A list of User Assigned Managed Identity IDs to be assigned to this Data Collection Rule. Currently, up to 1 identity is supported.
-- `type` - (Required) Specifies the type of Managed Service Identity that should be configured on this Data Collection Rule. Possible values are `SystemAssigned` and `UserAssigned`.
+Description: Retry configuration applied to every supported AzAPI resource declared by the module. Defaults to `null` (no custom retry).
 
-Type:
+- `error_message_regex`  - (Optional) A list of regex patterns matching error messages that trigger a retry.
+- `interval_seconds`     - (Optional) Initial interval between retries in seconds.
+- `max_interval_seconds` - (Optional) Maximum interval between retries in seconds.
 
-```hcl
-object({
-    identity_ids = optional(set(string))
-    type         = string
-  })
-```
-
-Default: `null`
-
-### <a name="input_monitor_data_collection_rule_kind"></a> [monitor\_data\_collection\_rule\_kind](#input\_monitor\_data\_collection\_rule\_kind)
-
-Description: (Optional) The kind of the Data Collection Rule. Possible values are `Linux`, `Windows`, `AgentDirectToStore` and `WorkspaceTransforms`. A rule of kind `Linux` does not allow for `windows_event_log` data sources. And a rule of kind `Windows` does not allow for `syslog` data sources. If kind is not specified, all kinds of data sources are allowed.
-
-Type: `string`
-
-Default: `null`
-
-### <a name="input_monitor_data_collection_rule_stream_declaration"></a> [monitor\_data\_collection\_rule\_stream\_declaration](#input\_monitor\_data\_collection\_rule\_stream\_declaration)
-
-Description: - `stream_name` - (Required) The name of the custom stream. This name should be unique across all `stream_declaration` blocks.
-
----
-`column` block supports the following:
-- `name` - (Required) The name of the column.
-- `type` - (Required) The type of the column data. Possible values are `string`, `int`, `long`, `real`, `boolean`, `datetime`,and `dynamic`.
-
-Type:
-
-```hcl
-set(object({
-    stream_name = string
-    column = list(object({
-      name = string
-      type = string
-    }))
-  }))
-```
-
-Default: `null`
-
-### <a name="input_monitor_data_collection_rule_tags"></a> [monitor\_data\_collection\_rule\_tags](#input\_monitor\_data\_collection\_rule\_tags)
-
-Description: (Optional) A mapping of tags which should be assigned to the Data Collection Rule.
-
-Type: `map(string)`
-
-Default: `null`
-
-### <a name="input_monitor_data_collection_rule_timeouts"></a> [monitor\_data\_collection\_rule\_timeouts](#input\_monitor\_data\_collection\_rule\_timeouts)
-
-Description: - `create` - (Defaults to 30 minutes) Used when creating the Data Collection Rule.
-- `delete` - (Defaults to 30 minutes) Used when deleting the Data Collection Rule.
-- `read` - (Defaults to 5 minutes) Used when retrieving the Data Collection Rule.
-- `update` - (Defaults to 30 minutes) Used when updating the Data Collection Rule.
+See <https://registry.terraform.io/providers/Azure/azapi/latest/docs/resources/resource#retry> for full semantics.
 
 Type:
 
 ```hcl
 object({
-    create = optional(string)
-    delete = optional(string)
-    read   = optional(string)
-    update = optional(string)
+    error_message_regex  = optional(list(string))
+    interval_seconds     = optional(number)
+    max_interval_seconds = optional(number)
   })
 ```
 
@@ -529,16 +649,16 @@ Default: `null`
 
 ### <a name="input_role_assignments"></a> [role\_assignments](#input\_role\_assignments)
 
-Description:   A map of role assignments to create on the Key Vault. The map key is deliberately arbitrary to avoid issues where map keys maybe unknown at plan time.
+Description: A map of role assignments to create on the Data Collection Rule. The map key is deliberately arbitrary to avoid issues where map keys maybe unknown at plan time.
 
-  - `role_definition_id_or_name` - The ID or name of the role definition to assign to the principal.
-  - `principal_id` - The ID of the principal to assign the role to.
-  - `description` - The description of the role assignment.
-  - `skip_service_principal_aad_check` - If set to true, skips the Azure Active Directory check for the service principal in the tenant. Defaults to false.
-  - `condition` - The condition which will be used to scope the role assignment.
-  - `condition_version` - The version of the condition syntax. Leave as `null` if you are not using a condition, if you are then valid values are '2.0'.
+- `role_definition_id_or_name` - The ID or name of the role definition to assign to the principal.
+- `principal_id` - The ID of the principal to assign the role to.
+- `description` - The description of the role assignment.
+- `skip_service_principal_aad_check` - If set to true, skips the Azure Active Directory check for the service principal in the tenant. Defaults to false.
+- `condition` - The condition which will be used to scope the role assignment.
+- `condition_version` - The version of the condition syntax. Leave as `null` if you are not using a condition, if you are then valid values are '2.0'.
 
-  > Note: only set `skip_service_principal_aad_check` to true if you are assigning a role to a service principal.
+> Note: only set `skip_service_principal_aad_check` to true if you are assigning a role to a service principal.
 
 Type:
 
@@ -546,6 +666,7 @@ Type:
 map(object({
     role_definition_id_or_name             = string
     principal_id                           = string
+    name                                   = optional(string, null)
     description                            = optional(string, null)
     skip_service_principal_aad_check       = optional(bool, false)
     condition                              = optional(string, null)
@@ -557,17 +678,86 @@ map(object({
 
 Default: `{}`
 
+### <a name="input_stream_declarations"></a> [stream\_declarations](#input\_stream\_declarations)
+
+Description: Custom stream declarations for the Data Collection Rule. Maps to `properties.streamDeclarations` in the ARM schema.
+
+The ARM schema models this as a dictionary keyed by stream name, so the map key is the stream name. Before v0.3.0 this was a set of objects carrying a `stream_name` attribute.
+
+- `columns` - (Required) The list of columns used by data in this stream.
+  - `name` - (Required) The name of the column.
+  - `type` - (Required) The type of the column data. Possible values are `string`, `int`, `long`, `real`, `boolean`, `datetime`, `dynamic`, and `guid`.
+
+Type:
+
+```hcl
+map(object({
+    columns = list(object({
+      name = string
+      type = string
+    }))
+  }))
+```
+
+Default: `null`
+
+### <a name="input_tags"></a> [tags](#input\_tags)
+
+Description: (Optional) Tags of the resource.
+
+Type: `map(string)`
+
+Default: `null`
+
+### <a name="input_timeouts"></a> [timeouts](#input\_timeouts)
+
+Description: Default per-operation timeouts applied to every supported AzAPI resource declared by the module. Defaults to `null` (provider defaults). Each value is a Go duration string, for example `30m` or `1h`.
+
+- `create` - (Optional) Timeout for create operations.
+- `read`   - (Optional) Timeout for read operations.
+- `update` - (Optional) Timeout for update operations.
+- `delete` - (Optional) Timeout for delete operations.
+
+Type:
+
+```hcl
+object({
+    create = optional(string)
+    read   = optional(string)
+    update = optional(string)
+    delete = optional(string)
+  })
+```
+
+Default: `null`
+
 ## Outputs
 
 The following outputs are exported:
 
-### <a name="output_resource"></a> [resource](#output\_resource)
+### <a name="output_logs_ingestion_endpoint"></a> [logs\_ingestion\_endpoint](#output\_logs\_ingestion\_endpoint)
 
-Description: The full output for the Monitor Data Collection Rule.
+Description: The endpoint used to ingest logs into the Data Collection Rule.
+
+### <a name="output_metrics_ingestion_endpoint"></a> [metrics\_ingestion\_endpoint](#output\_metrics\_ingestion\_endpoint)
+
+Description: The endpoint used to ingest metrics into the Data Collection Rule.
+
+### <a name="output_name"></a> [name](#output\_name)
+
+Description: The name of the Monitor Data Collection Rule.
 
 ### <a name="output_resource_id"></a> [resource\_id](#output\_resource\_id)
 
-Description: The full output for the Monitor Data Collection Rule.
+Description: The resource ID of the Monitor Data Collection Rule.
+
+### <a name="output_rule_immutable_id"></a> [rule\_immutable\_id](#output\_rule\_immutable\_id)
+
+Description: The immutable ID that Azure assigned to the Monitor Data Collection Rule.
+
+### <a name="output_system_assigned_mi_principal_id"></a> [system\_assigned\_mi\_principal\_id](#output\_system\_assigned\_mi\_principal\_id)
+
+Description: The principal ID of the system assigned managed identity, if one is enabled.
 
 ## Modules
 
