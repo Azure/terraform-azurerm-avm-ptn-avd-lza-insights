@@ -111,7 +111,6 @@ locals {
     azureDataExplorer = var.destinations.azure_data_explorer == null ? null : [
       for destination in var.destinations.azure_data_explorer : {
         databaseName = destination.database_name
-        ingestionUri = destination.ingestion_uri
         name         = destination.name
         resourceId   = destination.resource_id
       }

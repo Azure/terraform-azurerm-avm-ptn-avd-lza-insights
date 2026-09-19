@@ -220,7 +220,6 @@ variable "destinations" {
   type = object({
     azure_data_explorer = optional(list(object({
       database_name = optional(string)
-      ingestion_uri = optional(string)
       name          = string
       resource_id   = optional(string)
     })))
@@ -275,9 +274,8 @@ Before v0.3.0 the `event_hub`, `event_hub_direct`, and `log_analytics` destinati
 ---
 `azure_data_explorer` supports the following:
 - `database_name` - (Optional) The Azure Data Explorer database to ingest into.
-- `ingestion_uri` - (Optional) The ingestion URI of the cluster.
 - `name` - (Required) The name of this destination.
-- `resource_id` - (Optional) The resource ID of the Azure Data Explorer cluster.
+- `resource_id` - (Required) The resource ID of the Azure Data Explorer cluster. Azure supplies the read-only ingestion URI.
 
 ---
 `azure_monitor_metrics` supports the following:
@@ -285,18 +283,18 @@ Before v0.3.0 the `event_hub`, `event_hub_direct`, and `log_analytics` destinati
 
 ---
 `event_hubs` supports the following:
-- `event_hub_resource_id` - (Optional) The resource ID of the Event Hub.
+- `event_hub_resource_id` - (Required) The resource ID of the Event Hub. Replaces `event_hub_id`.
 - `name` - (Required) The name of this destination.
 
 ---
 `event_hubs_direct` supports the following:
-- `event_hub_resource_id` - (Optional) The resource ID of the Event Hub.
+- `event_hub_resource_id` - (Required) The resource ID of the Event Hub. Replaces `event_hub_id`.
 - `name` - (Required) The name of this destination.
 
 ---
 `log_analytics` supports the following:
 - `name` - (Required) The name of this destination.
-- `workspace_resource_id` - (Optional) The resource ID of the Log Analytics workspace.
+- `workspace_resource_id` - (Required) The resource ID of the Log Analytics workspace.
 
 ---
 `microsoft_fabric` supports the following:
@@ -308,28 +306,77 @@ Before v0.3.0 the `event_hub`, `event_hub_direct`, and `log_analytics` destinati
 
 ---
 `monitoring_accounts` supports the following:
-- `account_resource_id` - (Optional) The resource ID of the Monitor account.
+- `account_resource_id` - (Required) The resource ID of the Monitor account. Replaces `monitor_account_id`.
 - `name` - (Required) The name of this destination.
 
 ---
 `storage_accounts` supports the following:
 - `container_name` - (Optional) The storage container name.
 - `name` - (Required) The name of this destination.
-- `storage_account_resource_id` - (Optional) The resource ID of the storage account.
+- `storage_account_resource_id` - (Required) The resource ID of the storage account. Replaces `storage_account_id`.
 
 ---
 `storage_blobs_direct` supports the following:
 - `container_name` - (Optional) The storage container name.
 - `name` - (Required) The name of this destination.
-- `storage_account_resource_id` - (Optional) The resource ID of the storage account.
+- `storage_account_resource_id` - (Required) The resource ID of the storage account. Replaces `storage_account_id`.
 
 ---
 `storage_tables_direct` supports the following:
 - `name` - (Required) The name of this destination.
-- `storage_account_resource_id` - (Optional) The resource ID of the storage account.
+- `storage_account_resource_id` - (Required) The resource ID of the storage account. Replaces `storage_account_id`.
 - `table_name` - (Optional) The storage table name.
 DESCRIPTION
   nullable    = false
+
+  validation {
+    condition = var.destinations.azure_data_explorer == null ? true : alltrue([
+      for destination in var.destinations.azure_data_explorer : can(provider::azapi::parse_resource_id("Microsoft.Kusto/clusters", destination.resource_id))
+    ])
+    error_message = "Each azure_data_explorer destination must set a valid Azure Data Explorer cluster resource_id."
+  }
+  validation {
+    condition = var.destinations.event_hubs == null ? true : alltrue([
+      for destination in var.destinations.event_hubs : can(provider::azapi::parse_resource_id("Microsoft.EventHub/namespaces/eventhubs", destination.event_hub_resource_id))
+    ])
+    error_message = "Each event_hubs destination must set a valid event_hub_resource_id. The legacy event_hub_id attribute is no longer supported."
+  }
+  validation {
+    condition = var.destinations.event_hubs_direct == null ? true : alltrue([
+      for destination in var.destinations.event_hubs_direct : can(provider::azapi::parse_resource_id("Microsoft.EventHub/namespaces/eventhubs", destination.event_hub_resource_id))
+    ])
+    error_message = "Each event_hubs_direct destination must set a valid event_hub_resource_id. The legacy event_hub_id attribute is no longer supported."
+  }
+  validation {
+    condition = var.destinations.log_analytics == null ? true : alltrue([
+      for destination in var.destinations.log_analytics : can(provider::azapi::parse_resource_id("Microsoft.OperationalInsights/workspaces", destination.workspace_resource_id))
+    ])
+    error_message = "Each log_analytics destination must set a valid workspace_resource_id."
+  }
+  validation {
+    condition = var.destinations.monitoring_accounts == null ? true : alltrue([
+      for destination in var.destinations.monitoring_accounts : can(provider::azapi::parse_resource_id("Microsoft.Monitor/accounts", destination.account_resource_id))
+    ])
+    error_message = "Each monitoring_accounts destination must set a valid account_resource_id. The legacy monitor_account_id attribute is no longer supported."
+  }
+  validation {
+    condition = var.destinations.storage_accounts == null ? true : alltrue([
+      for destination in var.destinations.storage_accounts : can(provider::azapi::parse_resource_id("Microsoft.Storage/storageAccounts", destination.storage_account_resource_id))
+    ])
+    error_message = "Each storage_accounts destination must set a valid storage_account_resource_id. The legacy storage_account_id attribute is no longer supported."
+  }
+  validation {
+    condition = var.destinations.storage_blobs_direct == null ? true : alltrue([
+      for destination in var.destinations.storage_blobs_direct : can(provider::azapi::parse_resource_id("Microsoft.Storage/storageAccounts", destination.storage_account_resource_id))
+    ])
+    error_message = "Each storage_blobs_direct destination must set a valid storage_account_resource_id. The legacy storage_account_id attribute is no longer supported."
+  }
+  validation {
+    condition = var.destinations.storage_tables_direct == null ? true : alltrue([
+      for destination in var.destinations.storage_tables_direct : can(provider::azapi::parse_resource_id("Microsoft.Storage/storageAccounts", destination.storage_account_resource_id))
+    ])
+    error_message = "Each storage_tables_direct destination must set a valid storage_account_resource_id. The legacy storage_account_id attribute is no longer supported."
+  }
 }
 
 # tflint-ignore: terraform_unused_declarations
@@ -407,7 +454,7 @@ DESCRIPTION
 variable "kind" {
   type        = string
   default     = null
-  description = "(Optional) The kind of the Data Collection Rule. Possible values include `Linux`, `Windows`, `AgentDirectToStore`, and `WorkspaceTransforms`. A rule of kind `Linux` does not allow `windows_event_logs` data sources, and a rule of kind `Windows` does not allow `syslog` data sources. If not specified, all kinds of data sources are allowed."
+  description = "(Optional) The kind of the Data Collection Rule. Possible values include `Linux`, `Windows`, `AgentDirectToStore`, and `WorkspaceTransforms`. A rule of kind `Linux` does not allow `windows_event_logs` data sources, and a rule of kind `Windows` does not allow `syslog` data sources. If not specified, all kinds of data sources are allowed. Changing this value forces a new resource, including setting it on a rule that previously omitted it."
 }
 
 # tflint-ignore: terraform_unused_declarations

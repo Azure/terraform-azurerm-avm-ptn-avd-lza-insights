@@ -19,6 +19,7 @@ resource "azapi_resource" "this" {
   # Unset optional inputs are `null` in `body`. Without this the provider would
   # send them to Azure as explicit JSON nulls.
   ignore_null_property   = true
+  replace_triggers_refs  = ["kind"]
   response_export_values = ["properties.endpoints", "properties.immutableId"]
   retry                  = var.retry
   tags                   = var.tags
