@@ -23,6 +23,8 @@ This is a breaking change to the input and output surface. The module ships a `m
 - Confirm the plan proposes **no deletion or replacement of the rule** before applying. Output and state-address changes are expected. Review any in-place changes to the rule's settings before proceeding. If an equivalent configuration proposes replacement, stop and open an issue.
 - After applying the migration, run another plan and confirm there are no remaining resource changes.
 
+The integration test in `tests/integration/upgrade.tftest.hcl` runs this path against real Azure. It deploys a rule with v0.2.0 and then migrates the same state to this version. It checks that the rule keeps its resource ID and immutable ID and that the next plan has no changes. It also checks that changing `kind` afterwards replaces the rule.
+
 ### Renamed inputs
 
 | Before v0.3.0 | v0.3.0 |
