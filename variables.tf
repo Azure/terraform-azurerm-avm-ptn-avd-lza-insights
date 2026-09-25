@@ -1,3 +1,9 @@
+variable "location" {
+  type        = string
+  description = "(Required) The Azure Region where the Data Collection Rule should exist. Changing this forces a new Data Collection Rule to be created."
+  nullable    = false
+}
+
 variable "monitor_data_collection_rule_data_flow" {
   type = list(object({
     built_in_transform = optional(string)
@@ -14,11 +20,6 @@ variable "monitor_data_collection_rule_data_flow" {
  - `transform_kql` - (Optional) The KQL query to transform stream data.
 EOT
   nullable    = false
-}
-
-variable "monitor_data_collection_rule_location" {
-  type        = string
-  description = "(Optional) The Azure Region where the Data Collection Rule should exist. Changing this forces a new Data Collection Rule to be created."
 }
 
 variable "monitor_data_collection_rule_name" {
