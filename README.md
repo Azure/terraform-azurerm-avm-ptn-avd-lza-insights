@@ -42,6 +42,12 @@ The following resources are used by this module:
 
 The following input variables are required:
 
+### <a name="input_location"></a> [location](#input\_location)
+
+Description: (Required) The Azure Region where the Data Collection Rule should exist. Changing this forces a new Data Collection Rule to be created.
+
+Type: `string`
+
 ### <a name="input_monitor_data_collection_rule_data_flow"></a> [monitor\_data\_collection\_rule\_data\_flow](#input\_monitor\_data\_collection\_rule\_data\_flow)
 
 Description: - `built_in_transform` - (Optional) The built-in transform to transform stream data.
@@ -61,12 +67,6 @@ list(object({
     transform_kql      = optional(string)
   }))
 ```
-
-### <a name="input_monitor_data_collection_rule_location"></a> [monitor\_data\_collection\_rule\_location](#input\_monitor\_data\_collection\_rule\_location)
-
-Description: (Optional) The Azure Region where the Data Collection Rule should exist. Changing this forces a new Data Collection Rule to be created.
-
-Type: `string`
 
 ### <a name="input_monitor_data_collection_rule_name"></a> [monitor\_data\_collection\_rule\_name](#input\_monitor\_data\_collection\_rule\_name)
 
