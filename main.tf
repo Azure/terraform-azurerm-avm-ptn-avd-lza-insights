@@ -1,6 +1,6 @@
 # Create DCR for AVD resources
 resource "azurerm_monitor_data_collection_rule" "this" {
-  location                    = var.monitor_data_collection_rule_location
+  location                    = var.location
   name                        = var.monitor_data_collection_rule_name
   resource_group_name         = var.monitor_data_collection_rule_resource_group_name
   data_collection_endpoint_id = var.monitor_data_collection_rule_data_collection_endpoint_id
