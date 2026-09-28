@@ -28,7 +28,7 @@ provider "azurerm" {
 # This ensures we have unique CAF compliant names for our resources.
 module "naming" {
   source  = "Azure/naming/azurerm"
-  version = ">= 0.3.0"
+  version = "0.4.4"
 
   suffix = ["avd-monitoring"]
 }
@@ -291,13 +291,7 @@ The following resources are used by this module:
 <!-- markdownlint-disable MD013 -->
 ## Required Inputs
 
-The following input variables are required:
-
-### <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id)
-
-Description: The subscription ID for the Azure account.
-
-Type: `string`
+No required inputs.
 
 ## Optional Inputs
 
@@ -337,6 +331,14 @@ Type: `string`
 
 Default: `"avd-log-analytics-workspace"`
 
+### <a name="input_subscription_id"></a> [subscription\_id](#input\_subscription\_id)
+
+Description: The Azure subscription ID. When omitted, the provider uses ARM\_SUBSCRIPTION\_ID from the environment.
+
+Type: `string`
+
+Default: `null`
+
 ### <a name="input_vm_count"></a> [vm\_count](#input\_vm\_count)
 
 Description: Number of virtual machines to create
@@ -363,7 +365,7 @@ Version:
 
 Source: Azure/naming/azurerm
 
-Version: >= 0.3.0
+Version: 0.4.4
 
 <!-- markdownlint-disable-next-line MD041 -->
 ## Data Collection

@@ -1,6 +1,7 @@
 variable "subscription_id" {
   type        = string
-  description = "The subscription ID for the Azure account."
+  default     = null
+  description = "The Azure subscription ID. When omitted, the provider uses ARM_SUBSCRIPTION_ID from the environment."
 }
 
 variable "avd_vm_name" {
