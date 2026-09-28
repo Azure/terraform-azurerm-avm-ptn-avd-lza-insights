@@ -148,6 +148,10 @@ The following outputs are exported:
 
 Description: The ID of the Data Collection Rule deployed to the required location.
 
+### <a name="output_data_collection_rule_location"></a> [data\_collection\_rule\_location](#output\_data\_collection\_rule\_location)
+
+Description: The Azure region reported by the deployed Data Collection Rule.
+
 ## Modules
 
 The following Modules are called:
