@@ -21,7 +21,7 @@ provider "azurerm" {
 # This ensures we have unique CAF compliant names for our resources.
 module "naming" {
   source  = "Azure/naming/azurerm"
-  version = ">= 0.3.0"
+  version = "0.4.4"
 
   suffix = ["avd-monitoring"]
 }
@@ -198,13 +198,13 @@ resource "azurerm_virtual_machine_extension" "aadjoin" {
 module "dcr" {
   source = "../../"
 
+  location = azurerm_resource_group.this.location
   monitor_data_collection_rule_data_flow = [
     {
       destinations = [azurerm_log_analytics_workspace.this.name]
       streams      = ["Microsoft-Perf", "Microsoft-Event"]
     }
   ]
-  monitor_data_collection_rule_location            = azurerm_resource_group.this.location
   monitor_data_collection_rule_name                = "microsoft-avdi-eastus"
   monitor_data_collection_rule_resource_group_name = azurerm_resource_group.this.name
   enable_telemetry                                 = var.enable_telemetry

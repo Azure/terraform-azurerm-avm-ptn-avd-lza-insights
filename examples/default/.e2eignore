@@ -1,0 +1,1 @@
+This complete AVD host-pool and VM scenario needs VM capacity and subscription-specific setup and has a time-dependent registration token, so it cannot pass unattended deployment and idempotence checks. The required-location example runs the Data Collection Rule against self-contained test resources. Validate this larger scenario manually in a configured lab.
