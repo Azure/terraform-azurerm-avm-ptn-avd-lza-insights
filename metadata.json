@@ -4,7 +4,6 @@
   "moduleDescription": "AVM Pattern Module for AVD Insights",
   "canonicalType": "avd-lza/insights",
   "owners": [
-    "jensheerin",
     "sihbher"
   ],
   "telemetryIdPrefix": "46d3xtrf.ptn.cd4a0b1",
