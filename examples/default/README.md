@@ -23,7 +23,7 @@ data "azapi_client_config" "this" {}
 # This ensures we have unique CAF compliant names for our resources.
 module "naming" {
   source  = "Azure/naming/azurerm"
-  version = "0.4.3"
+  version = "0.4.4"
 
   suffix = ["avd-monitoring"]
 }
@@ -186,7 +186,7 @@ Version:
 
 Source: Azure/naming/azurerm
 
-Version: 0.4.3
+Version: 0.4.4
 
 <!-- markdownlint-disable-next-line MD041 -->
 ## Data Collection

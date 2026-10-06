@@ -8,9 +8,9 @@ Azure Verified Module to deploy Azure Virtual Desktop Insights
 Features
 Data Collection Rules for Azure Virtual Desktop Insights
 
-## Upgrading to v0.3.0
+## Upgrading to v0.4.0
 
-v0.3.0 replaces the AzureRM provider with the AzAPI provider, as required by the AVM specification. The module no longer declares `hashicorp/azurerm` at all, so it is no longer tied to a single AzureRM major version. This resolves the request in [#126](https://github.com/Azure/terraform-azurerm-avm-ptn-avd-lza-insights/issues/126).
+v0.4.0 replaces the AzureRM provider with the AzAPI provider, as required by the AVM specification. The module no longer declares `hashicorp/azurerm` at all, so it is no longer tied to a single AzureRM major version. This resolves the request in [#126](https://github.com/Azure/terraform-azurerm-avm-ptn-avd-lza-insights/issues/126).
 
 This is a breaking change to the input and output surface. The module ships a `moved` block to transfer the existing `azurerm_monitor_data_collection_rule.this` state entry to AzAPI. Keep the same module address and equivalent resource settings when upgrading. The state move does not prevent replacement if you also change settings that require a new rule.
 
@@ -23,14 +23,14 @@ This is a breaking change to the input and output surface. The module ships a `m
 - Confirm the plan proposes **no deletion or replacement of the rule** before applying. Output and state-address changes are expected. Review any in-place changes to the rule's settings before proceeding. If an equivalent configuration proposes replacement, stop and open an issue.
 - After applying the migration, run another plan and confirm there are no remaining resource changes.
 
-The integration test in `tests/integration/upgrade.tftest.hcl` runs this path against real Azure. It deploys a rule with v0.2.0 and then migrates the same state to this version. It checks that the rule keeps its resource ID and immutable ID and that the next plan has no changes. It also checks that changing `kind` afterwards replaces the rule.
+The integration test in `tests/integration/upgrade.tftest.hcl` runs this path against real Azure. It deploys a rule with v0.3.0 and then migrates the same state to this version. It checks that the rule keeps its resource ID and immutable ID and that the next plan has no changes. It also checks that changing `kind` afterwards replaces the rule.
 
 ### Renamed inputs
 
-| Before v0.3.0 | v0.3.0 |
+| Before v0.4.0 | v0.4.0 |
 | --- | --- |
 | `monitor_data_collection_rule_name` | `name` |
-| `monitor_data_collection_rule_location` | `location` |
+| `location` in v0.3.0, or `monitor_data_collection_rule_location` in v0.2.0 and earlier | `location` (unchanged from v0.3.0) |
 | `monitor_data_collection_rule_resource_group_name` (group **name**) | `parent_id` (group **resource ID**) |
 | `monitor_data_collection_rule_data_flow` | `data_flows` |
 | `monitor_data_collection_rule_data_sources` | `data_sources` |
@@ -44,7 +44,7 @@ The integration test in `tests/integration/upgrade.tftest.hcl` runs this path ag
 | `monitor_data_collection_rule_timeouts` | `timeouts` |
 | `monitor_data_collection_rule_association_*` | removed — these four inputs were declared but never used |
 
-`managed_identities` already existed in v0.2.0 with the same shape, but nothing consumed it. It is now the identity input, and setting it takes effect.
+`managed_identities` already existed in earlier versions with the same shape, but nothing consumed it. It is now the identity input, and setting it takes effect.
 
 ### Reshaped inputs
 
@@ -56,7 +56,7 @@ The `event_hub`, `event_hub_direct`, and `log_analytics` destinations change fro
 
 The following paths are relative to the old and new destination inputs:
 
-| Before v0.3.0 | v0.3.0 |
+| Before v0.4.0 | v0.4.0 |
 | --- | --- |
 | `event_hub.event_hub_id` | `event_hubs[*].event_hub_resource_id` |
 | `event_hub_direct.event_hub_id` | `event_hubs_direct[*].event_hub_resource_id` |
@@ -71,7 +71,7 @@ Keep each destination's `name`, `container_name`, and `table_name` where applica
 For example, inside the caller's module block:
 
 ```hcl
-# Before v0.3.0
+# Before v0.4.0
 monitor_data_collection_rule_destinations = {
   event_hub = {
     name         = "events"
@@ -81,7 +81,7 @@ monitor_data_collection_rule_destinations = {
 ```
 
 ```hcl
-# v0.3.0
+# v0.4.0
 destinations = {
   event_hubs = [{
     name                  = "events"
@@ -100,7 +100,7 @@ Additional nested changes:
 For example, a custom stream changes as follows:
 
 ```hcl
-# Before v0.3.0
+# Before v0.4.0
 monitor_data_collection_rule_stream_declaration = [{
   stream_name = "Custom-Events"
   column      = [{ name = "TimeGenerated", type = "datetime" }]
@@ -108,7 +108,7 @@ monitor_data_collection_rule_stream_declaration = [{
 ```
 
 ```hcl
-# v0.3.0
+# v0.4.0
 stream_declarations = {
   "Custom-Events" = {
     columns = [{ name = "TimeGenerated", type = "datetime" }]
@@ -118,7 +118,7 @@ stream_declarations = {
 
 The managed identity input also changes shape:
 
-| Before v0.3.0: `monitor_data_collection_rule_identity` | v0.3.0: `managed_identities` |
+| Before v0.4.0: `monitor_data_collection_rule_identity` | v0.4.0: `managed_identities` |
 | --- | --- |
 | `type = "SystemAssigned"` | `system_assigned = true` |
 | `type = "UserAssigned"` with `identity_ids = [...]` | `user_assigned_resource_ids = [...]` |
@@ -130,7 +130,7 @@ Every data source that supports it also gains `transform_kql`, data flows gain `
 
 ### Changed outputs
 
-| Before v0.3.0 | v0.3.0 |
+| Before v0.4.0 | v0.4.0 |
 | --- | --- |
 | `resource` (the whole provider object) | removed — see [TFFR2](https://azure.github.io/Azure-Verified-Modules/specs/terraform/#id-tffr2---category-outputs---additional-terraform-outputs) |
 | `resource_id` (returned the whole object, not an ID) | `resource_id` — now returns the resource ID string |

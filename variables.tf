@@ -42,7 +42,7 @@ variable "parent_id" {
   description = <<DESCRIPTION
 The fully-qualified ARM resource ID of the existing resource group into which the Data Collection Rule will be deployed, for example `/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-avd-monitoring`.
 
-This replaces the `monitor_data_collection_rule_resource_group_name` input used before v0.3.0. When migrating an existing deployment, supply the resource group ID exactly as it is spelled inside the rule's own resource ID, because `parent_id` forces replacement and is compared as a case-sensitive string.
+This replaces the `monitor_data_collection_rule_resource_group_name` input used before v0.4.0. When migrating an existing deployment, supply the resource group ID exactly as it is spelled inside the rule's own resource ID, because `parent_id` forces replacement and is compared as a case-sensitive string.
 DESCRIPTION
   nullable    = false
 
@@ -183,7 +183,7 @@ The data sources of the Data Collection Rule. Maps to `properties.dataSources` i
 
 ---
 `prometheus_forwarder` supports the following:
-- `label_include_filter` - (Optional) A map of label inclusion filters, where the map key is the label name and the map value is the label value. Only `microsoft_metrics_include_label` is currently supported, and values are matched case-insensitively. The ARM schema models this as a dictionary, so it is a map here rather than the list of label/value pairs used before v0.3.0.
+- `label_include_filter` - (Optional) A map of label inclusion filters, where the map key is the label name and the map value is the label value. Only `microsoft_metrics_include_label` is currently supported, and values are matched case-insensitively. The ARM schema models this as a dictionary, so it is a map here rather than the list of label/value pairs used before v0.4.0.
 - `name` - (Required) The name of this data source.
 - `streams` - (Required) A list of streams that this data source will be sent to. The supported value is `Microsoft-PrometheusMetrics`.
 
@@ -269,7 +269,7 @@ variable "destinations" {
   description = <<DESCRIPTION
 The destinations of the Data Collection Rule. Maps to `properties.destinations` in the ARM schema. Every destination `name` must be unique across all destination types within the rule, and each name referenced by `var.data_flows[*].destinations` must appear here.
 
-Before v0.3.0 the `event_hub`, `event_hub_direct`, and `log_analytics` destinations were single objects. The ARM schema models them as lists, so they are lists here. `storage_blob` is now `storage_accounts` and `monitor_account` is now `monitoring_accounts`, again matching ARM.
+Before v0.4.0 the `event_hub`, `event_hub_direct`, and `log_analytics` destinations were single objects. The ARM schema models them as lists, so they are lists here. `storage_blob` is now `storage_accounts` and `monitor_account` is now `monitoring_accounts`, again matching ARM.
 
 ---
 `azure_data_explorer` supports the following:
@@ -491,7 +491,7 @@ Controls the Managed Identity configuration on this resource. The following prop
 - `system_assigned` - (Optional) Specifies if the System Assigned Managed Identity should be enabled.
 - `user_assigned_resource_ids` - (Optional) Specifies a list of User Assigned Managed Identity resource IDs to be assigned to this resource.
 
-This replaces the `monitor_data_collection_rule_identity` input used before v0.3.0.
+This replaces the `monitor_data_collection_rule_identity` input used before v0.4.0.
 DESCRIPTION
   nullable    = false
 
@@ -574,7 +574,7 @@ variable "stream_declarations" {
   description = <<DESCRIPTION
 Custom stream declarations for the Data Collection Rule. Maps to `properties.streamDeclarations` in the ARM schema.
 
-The ARM schema models this as a dictionary keyed by stream name, so the map key is the stream name. Before v0.3.0 this was a set of objects carrying a `stream_name` attribute.
+The ARM schema models this as a dictionary keyed by stream name, so the map key is the stream name. Before v0.4.0 this was a set of objects carrying a `stream_name` attribute.
 
 - `columns` - (Required) The list of columns used by data in this stream.
   - `name` - (Required) The name of the column.

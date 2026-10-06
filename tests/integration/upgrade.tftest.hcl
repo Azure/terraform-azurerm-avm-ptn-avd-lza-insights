@@ -1,4 +1,4 @@
-# Upgrade test: deploys the rule with v0.2.0, the last AzureRM release, and
+# Upgrade test: deploys the rule with v0.3.0, the last AzureRM release, and
 # then applies this AzAPI implementation to the same state. It proves the
 # `moved` block adopts the existing rule instead of recreating it.
 #
@@ -7,7 +7,7 @@
 
 provider "azapi" {}
 
-# v0.2.0 manages the rule with `azurerm_monitor_data_collection_rule`, so the
+# v0.3.0 manages the rule with `azurerm_monitor_data_collection_rule`, so the
 # legacy run needs AzureRM. It is migration input only; the migrated module
 # declares no AzureRM resources.
 provider "azurerm" {
@@ -24,19 +24,19 @@ run "setup" {
   }
 }
 
-run "deploy_v0_2_0" {
+run "deploy_v0_3_0" {
   command   = apply
   state_key = "dcr"
 
   module {
     source  = "Azure/avm-ptn-avd-lza-insights/azurerm"
-    version = "0.2.0"
+    version = "0.3.0"
   }
 
   variables {
     enable_telemetry                                 = false
     monitor_data_collection_rule_kind                = "Windows"
-    monitor_data_collection_rule_location            = run.setup.location
+    location                                         = run.setup.location
     monitor_data_collection_rule_name                = run.setup.data_collection_rule_name
     monitor_data_collection_rule_resource_group_name = run.setup.resource_group_name
     monitor_data_collection_rule_data_flow = [
@@ -65,7 +65,7 @@ run "deploy_v0_2_0" {
 
   assert {
     condition     = startswith(output.resource.immutable_id, "dcr-")
-    error_message = "v0.2.0 should create a data collection rule with an immutable ID."
+    error_message = "v0.3.0 should create a data collection rule with an immutable ID."
   }
 }
 
@@ -107,8 +107,8 @@ run "plan_migration" {
   }
 
   assert {
-    condition     = lower(azapi_resource.this.id) == lower(run.deploy_v0_2_0.resource.id)
-    error_message = "The migration plan should adopt the v0.2.0 rule, not replace it."
+    condition     = lower(azapi_resource.this.id) == lower(run.deploy_v0_3_0.resource.id)
+    error_message = "The migration plan should adopt the v0.3.0 rule, not replace it."
   }
 }
 
@@ -149,13 +149,13 @@ run "apply_migration" {
   }
 
   assert {
-    condition     = lower(output.resource_id) == lower(run.deploy_v0_2_0.resource.id)
-    error_message = "The migrated rule should keep the v0.2.0 resource ID."
+    condition     = lower(output.resource_id) == lower(run.deploy_v0_3_0.resource.id)
+    error_message = "The migrated rule should keep the v0.3.0 resource ID."
   }
 
   assert {
-    condition     = output.rule_immutable_id == run.deploy_v0_2_0.resource.immutable_id
-    error_message = "The migrated rule should keep the v0.2.0 immutable ID. A new ID means Azure recreated the rule."
+    condition     = output.rule_immutable_id == run.deploy_v0_3_0.resource.immutable_id
+    error_message = "The migrated rule should keep the v0.3.0 immutable ID. A new ID means Azure recreated the rule."
   }
 
   assert {
@@ -204,7 +204,7 @@ run "plan_after_migration" {
   }
 
   assert {
-    condition     = output.rule_immutable_id == run.deploy_v0_2_0.resource.immutable_id
+    condition     = output.rule_immutable_id == run.deploy_v0_3_0.resource.immutable_id
     error_message = "The plan after migration should report no changes to the rule."
   }
 }
