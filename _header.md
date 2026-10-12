@@ -43,6 +43,7 @@ The integration test in `tests/integration/upgrade.tftest.hcl` runs this path ag
 | `monitor_data_collection_rule_tags` | `tags` |
 | `monitor_data_collection_rule_timeouts` | `timeouts` |
 | `monitor_data_collection_rule_association_*` | removed — these four inputs were declared but never used |
+| `diagnostic_settings`, `lock`, `role_assignments` | removed — these were declared but never used, so setting them had no effect |
 
 `managed_identities` already existed in earlier versions with the same shape, but nothing consumed it. It is now the identity input, and setting it takes effect.
 
