@@ -10,7 +10,7 @@ run "deploys_data_collection_rule_in_required_location" {
   }
 
   assert {
-    condition     = output.data_collection_rule_location == "eastus2"
+    condition     = lower(replace(output.data_collection_rule_location, " ", "")) == "eastus2"
     error_message = "The deployed Data Collection Rule must use the required location."
   }
 

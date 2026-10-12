@@ -1,9 +1,5 @@
 provider "azapi" {}
 
-provider "azurerm" {
-  features {}
-}
-
 data "azapi_client_config" "this" {}
 
 resource "random_string" "suffix" {
@@ -42,18 +38,17 @@ resource "azapi_resource" "log_analytics_workspace" {
 module "dcr" {
   source = "../../"
 
-  location = var.location
-  monitor_data_collection_rule_data_flow = [
+  data_flows = [
     {
       destinations = ["workspace"]
       streams      = ["Microsoft-Perf"]
     }
   ]
-  monitor_data_collection_rule_name                = "microsoft-avdi-${random_string.suffix.result}"
-  monitor_data_collection_rule_resource_group_name = azapi_resource.resource_group.name
-  enable_telemetry                                 = var.enable_telemetry
-  monitor_data_collection_rule_data_sources = {
-    performance_counter = [
+  location  = var.location
+  name      = "microsoft-avdi-${random_string.suffix.result}"
+  parent_id = azapi_resource.resource_group.id
+  data_sources = {
+    performance_counters = [
       {
         counter_specifiers            = ["\\Processor(_Total)\\% Processor Time"]
         name                          = "processor-time"
@@ -62,11 +57,22 @@ module "dcr" {
       }
     ]
   }
-  monitor_data_collection_rule_destinations = {
-    log_analytics = {
-      name                  = "workspace"
-      workspace_resource_id = azapi_resource.log_analytics_workspace.id
-    }
+  destinations = {
+    log_analytics = [
+      {
+        name                  = "workspace"
+        workspace_resource_id = azapi_resource.log_analytics_workspace.id
+      }
+    ]
   }
-  monitor_data_collection_rule_kind = "Windows"
+  enable_telemetry = var.enable_telemetry
+  kind             = "Windows"
+}
+
+# Reads the rule back from Azure, so the location output reflects what Azure
+# stored rather than the value passed in.
+data "azapi_resource" "dcr" {
+  resource_id            = module.dcr.resource_id
+  type                   = "Microsoft.Insights/dataCollectionRules@2024-03-11"
+  response_export_values = []
 }
