@@ -1,3 +1,9 @@
+variable "enable_telemetry" {
+  type        = bool
+  default     = true
+  description = "Whether to enable optional AVM usage telemetry for this isolated deployment test."
+}
+
 variable "location" {
   type        = string
   default     = "eastus2"
@@ -10,10 +16,4 @@ variable "tags" {
   default     = { environment = "test" }
   description = "Tags for the temporary test resources."
   nullable    = false
-}
-
-variable "enable_telemetry" {
-  type        = bool
-  default     = true
-  description = "Whether to enable optional AVM usage telemetry for this isolated deployment test."
 }
